@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+.pytest_cache/
+.venv/
+
+# Generated local data. Keep source code and Markdown reports in git, but do
+# not accidentally publish extracted private files or context packs.
+extracted/
+manifests/
+packs/
+reports/*
+!reports/.gitkeep
+!reports/*.md
+
