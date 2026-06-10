@@ -6,8 +6,10 @@ __pycache__/
 # Generated local data. Keep source code and Markdown reports in git, but do
 # not accidentally publish extracted private files or context packs.
 extracted/
+indexes/
 manifests/
 packs/
+queries/
 reports/*
 !reports/.gitkeep
 !reports/github_reuse_report.md

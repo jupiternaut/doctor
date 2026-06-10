@@ -19,6 +19,8 @@ A/B route experiment and Arena evaluation layer:
 
 ```text
 agent-context build     # ingest + hot context pack
+agent-context index     # JSONL manifests -> SQLite/FTS cold index
+agent-context query     # cold index -> RAG query context pack
 agent-context compare   # Route A chunk pack vs Route B graph-lite map
 agent-context arena     # three randomized candidate answers for user choice
 agent-context feedback  # append the user's selected candidate
@@ -29,6 +31,14 @@ Validated commands:
 ```bash
 uv run pytest -q
 uv run python -m compileall -q src tests
+uv run ./agent-context build \
+  --scope fixtures/downloads_sample \
+  --goal "分析 Downloads 里哪些文件适合进入个人助手长期记忆" \
+  --with-index
+uv run ./agent-context query \
+  --query "task planner skill workflow" \
+  --out /tmp/agent-context-rag-fixture \
+  --limit 5
 uv run ./agent-context arena \
   --scope /Users/gengrf/Downloads \
   --goal "分析 Downloads 里哪些文件适合进入个人助手长期记忆" \
@@ -60,6 +70,41 @@ is blind-ish route evaluation.
 
 Current limitation: Arena v0.1 renders candidate answers locally from selected
 sources. It does not yet run three independent Codex subprocess/API calls.
+
+## v0.2 Cold Index / RAG Status
+
+Implemented:
+
+```text
+indexes/context.sqlite
+queries/<query-id>-rag-<timestamp>/context.md
+queries/<query-id>-rag-<timestamp>/sources.jsonl
+queries/<query-id>-rag-<timestamp>/manifest.json
+```
+
+The cold index stores document records, chunks, failures, SQLite FTS5 rows when
+available, and deterministic local hash-vector-lite embeddings.
+
+Validation commands:
+
+```bash
+cd /Users/gengrf/agent-context-system
+uv run ./agent-context index
+uv run ./agent-context query \
+  --query "哪些文件适合进入个人助手长期记忆" \
+  --limit 12
+```
+
+Still not implemented:
+
+```text
+neural embeddings
+ANN vector index
+reranking model
+MCP server
+automatic Codex query hook
+feedback-trained edge refresh
+```
 
 ## Repository
 

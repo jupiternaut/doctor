@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .arena import build_arena, record_feedback
+from .cold_index import build_cold_index, query_cold_index
 from .compare import compare_routes
 from .ingest import ingest_scope, write_report, IngestPaths
 from .io import read_jsonl
@@ -34,6 +35,19 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--scope", required=True, help="File or directory scope to scan.")
     build.add_argument("--goal", required=True, help="Task goal for ranking context.")
     build.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    build.add_argument(
+        "--with-index",
+        action="store_true",
+        help="Also rebuild the SQLite cold index from generated manifests.",
+    )
+
+    index = subparsers.add_parser("index", help="Build the SQLite cold index from existing manifests.")
+    index.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    query = subparsers.add_parser("query", help="Query the cold index and write a RAG context pack.")
+    query.add_argument("--query", required=True, help="Natural-language or keyword query.")
+    query.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    query.add_argument("--limit", type=int, default=12, help="Maximum sources to return.")
 
     compare = subparsers.add_parser("compare", help="Run Route A and Route B context pack experiments.")
     compare.add_argument("--scope", required=True, help="File or directory scope to scan.")
@@ -78,6 +92,12 @@ def main(argv: list[str] | None = None) -> int:
         ingest_result = ingest_scope(Path(args.scope), out_root)
         pack_result = build_context_pack(Path(args.scope), out_root, args.goal)
         result = {"ingest": ingest_result, "pack": pack_result}
+        if args.with_index:
+            result["index"] = build_cold_index(out_root)
+    elif args.command == "index":
+        result = build_cold_index(out_root)
+    elif args.command == "query":
+        result = query_cold_index(out_root, args.query, limit=args.limit)
     elif args.command == "compare":
         result = compare_routes(Path(args.scope), out_root, args.goal, skip_ingest=args.skip_ingest)
     elif args.command == "arena":

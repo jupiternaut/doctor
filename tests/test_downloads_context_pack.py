@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import sqlite3
 from pathlib import Path
 
 from agent_context.cli import main
@@ -181,3 +182,50 @@ def test_arena_creates_three_candidates_and_feedback(tmp_path: Path) -> None:
     assert global_feedback
     assert arena_feedback[-1]["winner"] == "candidate-1"
     assert arena_feedback[-1]["reason"] == "test choice"
+
+
+def test_cold_index_and_query_create_rag_pack(tmp_path: Path) -> None:
+    scope = copy_fixture(tmp_path)
+    out = tmp_path / "out"
+
+    assert main(["build", "--scope", str(scope), "--goal", GOAL, "--out", str(out), "--with-index"]) == 0
+
+    db_path = out / "indexes" / "context.sqlite"
+    assert db_path.exists()
+
+    conn = sqlite3.connect(db_path)
+    try:
+        document_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+        chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        meta = dict(conn.execute("SELECT key, value FROM meta").fetchall())
+    finally:
+        conn.close()
+
+    assert document_count >= 8
+    assert chunk_count >= 1
+    assert meta["index_version"] == "0.2"
+    assert meta["embedding"].startswith("local-hash-vector-lite")
+
+    assert main(["query", "--query", "task planner skill workflow", "--out", str(out), "--limit", "5"]) == 0
+
+    query_dirs = sorted((out / "queries").glob("*rag*"))
+    assert query_dirs
+    query_dir = query_dirs[-1]
+    context_md = query_dir / "context.md"
+    sources_jsonl = query_dir / "sources.jsonl"
+    manifest_json = query_dir / "manifest.json"
+
+    assert context_md.exists()
+    assert sources_jsonl.exists()
+    assert manifest_json.exists()
+
+    sources = read_jsonl(sources_jsonl)
+    manifest = json.loads(manifest_json.read_text(encoding="utf-8"))
+    context = context_md.read_text(encoding="utf-8")
+
+    assert sources
+    assert manifest["rag_version"] == "0.2"
+    assert manifest["retrieval_mode"] == "hybrid_fts_vector_lite_path"
+    assert "# RAG Query" in context
+    assert "# Top Sources" in context
+    assert any("task-planner.skill" in source["path"] or "notes.md" in source["path"] for source in sources)
