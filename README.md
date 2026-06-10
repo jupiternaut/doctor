@@ -20,6 +20,7 @@ raw files
 
 - [Architecture Context](docs/ARCHITECTURE_CONTEXT.md)
 - [Cloud Task: Downloads Context Pack v0.1](docs/CLOUD_TASK_DOWNLOADS_CONTEXT_PACK_V0_1.md)
+- [Agent Context System Handoff](docs/HANDOFF.md)
 
 ## Current Status
 
@@ -50,4 +51,3 @@ packs/<task-id>/context.md
 packs/<task-id>/sources.jsonl
 packs/<task-id>/manifest.json
 ```
-
