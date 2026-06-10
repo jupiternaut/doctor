@@ -22,6 +22,8 @@ raw files
 - [Cloud Task: Downloads Context Pack v0.1](docs/CLOUD_TASK_DOWNLOADS_CONTEXT_PACK_V0_1.md)
 - [Agent Context System Handoff](docs/HANDOFF.md)
 - [File Ingestion Workflow](docs/FILE_INGESTION_WORKFLOW.md)
+- [A/B Context Routes](docs/AB_ROUTES.md)
+- [Arena Evaluation](docs/ARENA.md)
 - [GitHub Reuse Report](reports/github_reuse_report.md)
 
 ## Current Status
@@ -78,4 +80,39 @@ reports/downloads_ingestion_report.md
 packs/<task-id>/context.md
 packs/<task-id>/sources.jsonl
 packs/<task-id>/manifest.json
+```
+
+## A/B Route Experiment
+
+```bash
+agent-context compare \
+  --scope /Users/gengrf/Downloads \
+  --goal "分析 Downloads 里哪些文件适合进入个人助手长期记忆"
+```
+
+Route A is the existing chunk/snippet hot pack. Route B is a graph-lite context
+map that makes folder, file type, goal term, document, and chunk relationships
+explicit before ranking sources. The comparison report is written to:
+
+```text
+reports/ab_comparison_report.md
+```
+
+## Arena Evaluation
+
+```bash
+agent-context arena \
+  --scope /Users/gengrf/Downloads \
+  --goal "分析 Downloads 里哪些文件适合进入个人助手长期记忆"
+```
+
+Arena mode generates three route-specific answers, randomizes them as
+`candidate-1`, `candidate-2`, and `candidate-3`, then records the user's chosen
+candidate:
+
+```bash
+agent-context feedback \
+  --slate packs/<task-id>-arena-<timestamp>/slate.json \
+  --winner candidate-2 \
+  --reason "best matches my intent"
 ```

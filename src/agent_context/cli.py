@@ -4,6 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
+from .arena import build_arena, record_feedback
+from .compare import compare_routes
 from .ingest import ingest_scope, write_report, IngestPaths
 from .io import read_jsonl
 from .pack import build_context_pack
@@ -33,13 +35,38 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--goal", required=True, help="Task goal for ranking context.")
     build.add_argument("--out", default=None, help="Output root. Overrides global --out.")
 
+    compare = subparsers.add_parser("compare", help="Run Route A and Route B context pack experiments.")
+    compare.add_argument("--scope", required=True, help="File or directory scope to scan.")
+    compare.add_argument("--goal", required=True, help="Task goal for ranking context.")
+    compare.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    compare.add_argument(
+        "--skip-ingest",
+        action="store_true",
+        help="Reuse existing manifests instead of scanning the scope before comparing routes.",
+    )
+
+    arena = subparsers.add_parser("arena", help="Generate a three-candidate arena slate for user selection.")
+    arena.add_argument("--scope", required=True, help="File or directory scope to scan.")
+    arena.add_argument("--goal", required=True, help="Task goal for generating candidate answers.")
+    arena.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    arena.add_argument(
+        "--skip-ingest",
+        action="store_true",
+        help="Reuse existing manifests instead of scanning the scope before generating the arena slate.",
+    )
+
+    feedback = subparsers.add_parser("feedback", help="Record the user's arena candidate choice.")
+    feedback.add_argument("--slate", required=True, help="Path to an arena slate.json file.")
+    feedback.add_argument("--winner", required=True, help="Winning candidate id, for example candidate-2.")
+    feedback.add_argument("--reason", default="", help="Optional free-text reason for the choice.")
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    out_root = Path(args.out or args.global_out).expanduser().resolve()
+    out_root = Path(getattr(args, "out", None) or args.global_out).expanduser().resolve()
 
     if args.command == "ingest":
         result = ingest_scope(Path(args.scope), out_root)
@@ -51,6 +78,12 @@ def main(argv: list[str] | None = None) -> int:
         ingest_result = ingest_scope(Path(args.scope), out_root)
         pack_result = build_context_pack(Path(args.scope), out_root, args.goal)
         result = {"ingest": ingest_result, "pack": pack_result}
+    elif args.command == "compare":
+        result = compare_routes(Path(args.scope), out_root, args.goal, skip_ingest=args.skip_ingest)
+    elif args.command == "arena":
+        result = build_arena(Path(args.scope), out_root, args.goal, skip_ingest=args.skip_ingest)
+    elif args.command == "feedback":
+        result = record_feedback(Path(args.slate), args.winner, args.reason)
     else:
         parser.error(f"unknown command: {args.command}")
 

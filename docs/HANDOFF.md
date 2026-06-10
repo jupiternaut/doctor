@@ -1,10 +1,65 @@
 # Agent Context System Handoff
 
-Last updated: 2026-06-10 12:45 Asia/Shanghai
+Last updated: 2026-06-10 18:30 Asia/Shanghai
 
 This is the operational handoff for the `agent-context-system` repository. It is
 written for a future Codex, Codex Cloud, or open-source agent that needs to
 continue the v0.1 Downloads context-pack work without relying on chat history.
+
+## Current Local Branch Update
+
+Branch:
+
+```text
+codex/v0.1-downloads-context-pack
+```
+
+The local checkout now contains a usable Python/uv CLI implementation plus the
+A/B route experiment and Arena evaluation layer:
+
+```text
+agent-context build     # ingest + hot context pack
+agent-context compare   # Route A chunk pack vs Route B graph-lite map
+agent-context arena     # three randomized candidate answers for user choice
+agent-context feedback  # append the user's selected candidate
+```
+
+Validated commands:
+
+```bash
+uv run pytest -q
+uv run python -m compileall -q src tests
+uv run ./agent-context arena \
+  --scope /Users/gengrf/Downloads \
+  --goal "分析 Downloads 里哪些文件适合进入个人助手长期记忆" \
+  --skip-ingest
+```
+
+Latest real Downloads arena output:
+
+```text
+packs/downloads-arena-20260610182523/slate.md
+packs/downloads-arena-20260610182523/slate.json
+packs/downloads-arena-20260610182523/slate_key.json
+packs/downloads-arena-20260610182523/candidate-1/
+packs/downloads-arena-20260610182523/candidate-2/
+packs/downloads-arena-20260610182523/candidate-3/
+```
+
+User-facing selection flow:
+
+```bash
+agent-context feedback \
+  --slate packs/downloads-arena-20260610182523/slate.json \
+  --winner candidate-2 \
+  --reason "best matches my intent"
+```
+
+Read `slate.md` first. Do not open `slate_key.json` before choosing if the goal
+is blind-ish route evaluation.
+
+Current limitation: Arena v0.1 renders candidate answers locally from selected
+sources. It does not yet run three independent Codex subprocess/API calls.
 
 ## Repository
 

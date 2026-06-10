@@ -106,3 +106,78 @@ def test_second_run_skips_unchanged_files(tmp_path: Path) -> None:
     documents = read_jsonl(out / "manifests" / "documents.jsonl")
     assert any(record["status"] == "skipped" for record in documents)
     assert any("unchanged; reused previous extraction" in record.get("warnings", []) for record in documents)
+
+
+def test_compare_creates_route_b_pack_and_report(tmp_path: Path) -> None:
+    scope = copy_fixture(tmp_path)
+    out = tmp_path / "out"
+
+    assert main(["compare", "--scope", str(scope), "--goal", GOAL, "--out", str(out)]) == 0
+
+    report = out / "reports" / "ab_comparison_report.md"
+    assert report.exists()
+    report_text = report.read_text(encoding="utf-8")
+    assert "Route A: Chunk Pack" in report_text
+    assert "Route B: Graph Context Map" in report_text
+
+    route_b_packs = sorted((out / "packs").glob("*route-b-graph*"))
+    assert route_b_packs
+    route_b = route_b_packs[-1]
+    context = (route_b / "context.md").read_text(encoding="utf-8")
+    graph = json.loads((route_b / "context_graph.json").read_text(encoding="utf-8"))
+    manifest = json.loads((route_b / "manifest.json").read_text(encoding="utf-8"))
+    sources = read_jsonl(route_b / "sources.jsonl")
+
+    assert "route: b_graph_context_map" in context
+    assert "# Graph Summary" in context
+    assert graph["kind"] == "agent-context-graph-lite"
+    assert graph["nodes"]
+    assert graph["edges"]
+    assert manifest["route"] == "b_graph_context_map"
+    assert sources
+
+
+def test_arena_creates_three_candidates_and_feedback(tmp_path: Path) -> None:
+    scope = copy_fixture(tmp_path)
+    out = tmp_path / "out"
+
+    assert main(["arena", "--scope", str(scope), "--goal", GOAL, "--out", str(out)]) == 0
+
+    arena_dirs = sorted((out / "packs").glob("*arena*"))
+    assert arena_dirs
+    arena = arena_dirs[-1]
+    slate_md = arena / "slate.md"
+    slate_json = arena / "slate.json"
+    slate_key = arena / "slate_key.json"
+
+    assert slate_md.exists()
+    assert slate_json.exists()
+    assert slate_key.exists()
+
+    slate = json.loads(slate_json.read_text(encoding="utf-8"))
+    assert slate["arena_version"] == "0.1"
+    assert len(slate["candidates"]) == 3
+
+    routes = {candidate["route"] for candidate in slate["candidates"]}
+    assert routes == {"a_chunk_pack", "b_graph_context_map", "c_explore_diversity"}
+
+    for index in range(1, 4):
+        candidate = arena / f"candidate-{index}"
+        assert (candidate / "context.md").exists()
+        assert (candidate / "answer.md").exists()
+        assert (candidate / "sources.jsonl").exists()
+        assert (candidate / "route.json").exists()
+
+    slate_text = slate_md.read_text(encoding="utf-8")
+    assert "Candidate-1" in slate_text
+    assert "Candidate-2" in slate_text
+    assert "Candidate-3" in slate_text
+
+    assert main(["feedback", "--slate", str(slate_json), "--winner", "candidate-1", "--reason", "test choice"]) == 0
+
+    arena_feedback = read_jsonl(arena / "feedback.jsonl")
+    global_feedback = read_jsonl(out / "feedback" / "arena_feedback.jsonl")
+    assert arena_feedback
+    assert global_feedback
+    assert arena_feedback[-1]["winner"] == "candidate-1"
+    assert arena_feedback[-1]["reason"] == "test choice"
