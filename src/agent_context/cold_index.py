@@ -36,6 +36,8 @@ STOP_TERMS = {
 QUERY_EXPANSIONS = {
     "个人助手": ["agent", "assistant", "mcp", "skill", "workflow", "context", "助手"],
     "长期记忆": ["memory", "remember", "skill", "workflow", "context", "handoff", "permalink", "记忆", "沉淀", "上下文", "工作流"],
+    "开源往事": ["开源", "黑盒", "gnu", "linux", "unix", "gpl", "微软", "sun", "ibm", "自由软件", "闭源"],
+    "开源": ["gnu", "linux", "unix", "gpl", "微软", "sun", "ibm", "自由软件", "闭源", "开放源代码"],
     "热上下文": ["context", "pack", "handoff", "上下文"],
     "冷索引": ["index", "search", "retrieval", "rag", "sqlite"],
     "rag": ["retrieval", "index", "search", "context"],
@@ -429,11 +431,15 @@ def retrieve_candidates(conn: sqlite3.Connection, query: str, limit: int, meta: 
         asset_prior = agent_asset_prior(candidate, query)
         if asset_prior:
             parts["asset"] = asset_prior
+        topic_prior = topical_prior(candidate, query)
+        if topic_prior:
+            parts["topic"] = topic_prior
         candidate["score"] = round(
             parts.get("fts", 0.0) * 0.35
-            + parts.get("vector", 0.0) * 0.35
+            + parts.get("vector", 0.0) * 0.25
             + parts.get("path", 0.0) * 0.10
-            + parts.get("asset", 0.0) * 0.20,
+            + parts.get("asset", 0.0) * 0.20
+            + parts.get("topic", 0.0) * 0.10,
             6,
         )
         ranked.append(candidate)
@@ -478,6 +484,42 @@ def agent_asset_prior(candidate: dict, query: str) -> float:
         if marker in haystack:
             score += 0.2
     return min(score, 1.0)
+
+
+def topical_prior(candidate: dict, query: str) -> float:
+    lower_query = query.lower()
+    if not any(trigger in lower_query for trigger in ("开源往事", "开源", "open source", "opensource")):
+        return 0.0
+
+    path = (candidate.get("path") or "").lower()
+    relative_path = (candidate.get("relative_path") or "").lower()
+    text = (candidate.get("text") or "").lower()
+    haystack = f"{path} {relative_path} {text[:4000]}"
+    markers = (
+        "开源",
+        "黑盒",
+        "gnu",
+        "linux",
+        "unix",
+        "gpl",
+        "微软",
+        "sun",
+        "ibm",
+        "自由软件",
+        "闭源",
+        "开放源代码",
+        "stallman",
+        "richard stallman",
+    )
+    hits = sum(1 for marker in markers if marker_matches(marker, haystack))
+    return min(1.0, hits / 4.0)
+
+
+def marker_matches(marker: str, haystack: str) -> bool:
+    if re.fullmatch(r"[a-z0-9 ]+", marker):
+        pattern = r"(?<![a-z0-9])" + re.escape(marker) + r"(?![a-z0-9])"
+        return re.search(pattern, haystack) is not None
+    return marker in haystack
 
 
 def fts_scores(conn: sqlite3.Connection, query: str, limit: int, meta: dict[str, str]) -> dict[str, float]:
