@@ -35,6 +35,7 @@ The working model is:
 
 ```text
 raw file system
+  -> project discovery / multi-scope registry
   -> document extraction
   -> cold storage index
   -> resolver / context DNS
@@ -58,6 +59,12 @@ outer transformer:
 
 The key correction is that the outer layer is not a neural Transformer
 implementation. It is a persistent, inspectable external attention system.
+
+Architecture diagram with the v0.3 position highlighted:
+
+```text
+docs/ARCHITECTURE_V0_3_VECTOR.svg
+```
 
 ## 3. Cold Index vs Hot Context
 
@@ -718,4 +725,3 @@ v0.1 Downloads End-to-End Context Pack
 
 The target repository should be this repository, not an unrelated repository
 such as `jupiternaut/warp`.
-

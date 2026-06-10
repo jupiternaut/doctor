@@ -19,6 +19,7 @@ raw files
 ## Documents
 
 - [Architecture Context](docs/ARCHITECTURE_CONTEXT.md)
+- [Architecture v0.3 Vector Diagram](docs/ARCHITECTURE_V0_3_VECTOR.svg)
 - [Cloud Task: Downloads Context Pack v0.1](docs/CLOUD_TASK_DOWNLOADS_CONTEXT_PACK_V0_1.md)
 - [Agent Context System Handoff](docs/HANDOFF.md)
 - [File Ingestion Workflow](docs/FILE_INGESTION_WORKFLOW.md)

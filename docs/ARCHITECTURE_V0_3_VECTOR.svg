@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="title desc">
+  <title id="title">Agent Context System Architecture With v0.3 Highlight</title>
+  <desc id="desc">Vector architecture diagram showing where v0.3 Project Discovery and Multi-Scope Index fits in the agent context system.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#344054"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 30px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #101828; }
+      .subtitle { font: 400 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475467; }
+      .label { font: 700 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #101828; }
+      .small { font: 400 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475467; }
+      .tiny { font: 400 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #667085; }
+      .box { stroke: #98a2b3; stroke-width: 1.5; rx: 14; ry: 14; }
+      .done { fill: #ecfdf3; stroke: #12b76a; }
+      .future { fill: #fff7ed; stroke: #f97316; stroke-width: 3; }
+      .neutral { fill: #ffffff; }
+      .cold { fill: #eff8ff; stroke: #2e90fa; }
+      .hot { fill: #fef3f2; stroke: #f04438; }
+      .mcp { fill: #f4f3ff; stroke: #7a5af8; }
+      .outer { fill: none; stroke: #667085; stroke-width: 2; stroke-dasharray: 8 8; rx: 24; ry: 24; }
+      .lane { fill: #ffffff; stroke: #d0d5dd; stroke-width: 1.2; rx: 18; ry: 18; }
+      .arrow { stroke: #344054; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .softArrow { stroke: #667085; stroke-width: 1.7; fill: none; stroke-dasharray: 6 5; marker-end: url(#arrow); }
+      .badge { fill: #f97316; }
+      .badgeText { font: 700 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="900"/>
+
+  <text class="title" x="56" y="64">Agent Context System 架构图：V0.3 的位置</text>
+  <text class="subtitle" x="56" y="96">V0.3 = Project Discovery + Multi-Scope Index，属于 raw file system 之后、文档解析/RAG 之前的“范围发现 + 命名层”。</text>
+
+  <rect class="outer" x="40" y="125" width="1320" height="630"/>
+  <text class="small" x="64" y="156">外部 attention / 外部 transformer 层：对文件、项目、chunk、workflow、memory 做可解释选择和排序</text>
+
+  <rect class="lane" x="70" y="185" width="1260" height="190"/>
+  <text class="label" x="96" y="220">输入与命名层</text>
+
+  <rect class="box neutral" x="95" y="245" width="180" height="92"/>
+  <text class="label" x="121" y="278">Raw Files</text>
+  <text class="small" x="121" y="304">/Users/gengrf</text>
+  <text class="tiny" x="121" y="326">files, dirs, repos, apps</text>
+
+  <rect class="box future" x="345" y="225" width="260" height="132"/>
+  <rect class="badge" x="367" y="244" width="58" height="24" rx="12"/>
+  <text class="badgeText" x="381" y="261">V0.3</text>
+  <text class="label" x="367" y="292">Project Discovery</text>
+  <text class="small" x="367" y="318">Multi-Scope Index</text>
+  <text class="tiny" x="367" y="340">git repos, skills, docs, apps, projects</text>
+
+  <rect class="box neutral" x="675" y="245" width="210" height="92"/>
+  <text class="label" x="703" y="278">Scope Registry</text>
+  <text class="small" x="703" y="304">project_id / scope_id</text>
+  <text class="tiny" x="703" y="326">namespaces and ownership</text>
+
+  <rect class="box neutral" x="955" y="245" width="235" height="92"/>
+  <text class="label" x="982" y="278">Project Summaries</text>
+  <text class="small" x="982" y="304">PROJECT_CONTEXT.md</text>
+  <text class="tiny" x="982" y="326">one summary per project</text>
+
+  <path class="arrow" d="M 275 291 L 338 291"/>
+  <path class="arrow" d="M 605 291 L 668 291"/>
+  <path class="arrow" d="M 885 291 L 948 291"/>
+
+  <rect class="lane" x="70" y="405" width="1260" height="205"/>
+  <text class="label" x="96" y="440">解析、冷索引、检索层</text>
+
+  <rect class="box done" x="95" y="465" width="210" height="102"/>
+  <text class="label" x="122" y="498">V0.1 Ingestion</text>
+  <text class="small" x="122" y="524">extract Markdown</text>
+  <text class="tiny" x="122" y="546">documents / chunks / failures</text>
+
+  <rect class="box cold" x="370" y="465" width="230" height="102"/>
+  <text class="label" x="397" y="498">V0.2 Cold Index</text>
+  <text class="small" x="397" y="524">SQLite + FTS5</text>
+  <text class="tiny" x="397" y="546">vector-lite, sources.jsonl</text>
+
+  <rect class="box cold" x="665" y="465" width="220" height="102"/>
+  <text class="label" x="691" y="498">Context DNS</text>
+  <text class="small" x="691" y="524">resolve query to scopes</text>
+  <text class="tiny" x="691" y="546">project-aware lookup</text>
+
+  <rect class="box cold" x="955" y="465" width="240" height="102"/>
+  <text class="label" x="982" y="498">Ranking / RAG</text>
+  <text class="small" x="982" y="524">FTS, vector, graph, prior</text>
+  <text class="tiny" x="982" y="546">future: reranker + feedback</text>
+
+  <path class="arrow" d="M 305 516 L 363 516"/>
+  <path class="arrow" d="M 600 516 L 658 516"/>
+  <path class="arrow" d="M 885 516 L 948 516"/>
+  <path class="softArrow" d="M 475 357 C 475 410, 200 410, 200 458"/>
+  <path class="softArrow" d="M 780 337 C 780 395, 775 420, 775 458"/>
+  <path class="softArrow" d="M 1072 337 C 1072 395, 1075 420, 1075 458"/>
+
+  <rect class="lane" x="70" y="640" width="1260" height="86"/>
+  <text class="label" x="96" y="675">执行与反馈层</text>
+
+  <rect class="box hot" x="320" y="657" width="225" height="52"/>
+  <text class="label" x="346" y="689">Hot Context Pack</text>
+
+  <rect class="box mcp" x="620" y="657" width="210" height="52"/>
+  <text class="label" x="657" y="689">MCP / Codex</text>
+
+  <rect class="box neutral" x="905" y="657" width="225" height="52"/>
+  <text class="label" x="936" y="689">Feedback / Edges</text>
+
+  <path class="arrow" d="M 1075 567 C 1075 625, 545 625, 545 683 L 552 683"/>
+  <path class="arrow" d="M 545 683 L 613 683"/>
+  <path class="arrow" d="M 830 683 L 898 683"/>
+  <path class="softArrow" d="M 1018 657 C 1018 600, 985 590, 955 565"/>
+  <path class="softArrow" d="M 1018 657 C 1018 390, 475 390, 475 358"/>
+
+  <rect class="box future" x="80" y="780" width="1240" height="78"/>
+  <text class="label" x="108" y="815">V0.3 验收含义</text>
+  <text class="small" x="108" y="842">把“只索引 Downloads”升级为“发现本机所有项目并建立 project_id / scope_id 命名空间”，让后续 RAG 能回答“本地所有项目里……”这类问题。</text>
+</svg>
