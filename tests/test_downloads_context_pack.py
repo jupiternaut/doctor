@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from agent_context.cli import main
+from agent_context.mcp_server import mcp_read_source, mcp_record_feedback, mcp_search_context
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -229,3 +230,35 @@ def test_cold_index_and_query_create_rag_pack(tmp_path: Path) -> None:
     assert "# RAG Query" in context
     assert "# Top Sources" in context
     assert any("task-planner.skill" in source["path"] or "notes.md" in source["path"] for source in sources)
+
+
+def test_mcp_tools_search_read_source_and_feedback(tmp_path: Path) -> None:
+    scope = copy_fixture(tmp_path)
+    out = tmp_path / "out"
+
+    assert main(["build", "--scope", str(scope), "--goal", GOAL, "--out", str(out), "--with-index"]) == 0
+
+    search_result = mcp_search_context("task planner skill workflow", limit=5, out_root=str(out))
+    assert search_result["mcp_version"] == "0.1"
+    assert search_result["sources_included"] > 0
+    assert search_result["top_sources"]
+    assert Path(search_result["context_md_path"]).exists()
+
+    top_source = search_result["top_sources"][0]
+    source_result = mcp_read_source(top_source["path"], out_root=str(out), max_chars=800)
+    assert source_result["mcp_version"] == "0.1"
+    assert source_result["text"]
+    assert len(source_result["text"]) <= 880
+
+    feedback_result = mcp_record_feedback(
+        query_id=search_result["query_id"],
+        selected_source=top_source["path"],
+        reason="fixture test",
+        rating=1,
+        out_root=str(out),
+    )
+    feedback_path = Path(feedback_result["feedback_path"])
+    assert feedback_path.exists()
+    feedback = read_jsonl(feedback_path)
+    assert feedback[-1]["query_id"] == search_result["query_id"]
+    assert feedback[-1]["selected_source"] == top_source["path"]

@@ -23,6 +23,7 @@ raw files
 - [Agent Context System Handoff](docs/HANDOFF.md)
 - [File Ingestion Workflow](docs/FILE_INGESTION_WORKFLOW.md)
 - [Cold Index And RAG](docs/COLD_INDEX_RAG.md)
+- [MCP Server](docs/MCP_SERVER.md)
 - [A/B Context Routes](docs/AB_ROUTES.md)
 - [Arena Evaluation](docs/ARENA.md)
 - [GitHub Reuse Report](reports/github_reuse_report.md)
@@ -116,6 +117,17 @@ queries/<query-id>-rag-<timestamp>/context.md
 queries/<query-id>-rag-<timestamp>/sources.jsonl
 queries/<query-id>-rag-<timestamp>/manifest.json
 ```
+
+## MCP Server
+
+```bash
+uv run agent-context mcp --out /Users/gengrf/agent-context-system
+```
+
+The MCP server exposes local tools for `search_context`, `index_context`,
+`build_hot_pack`, `read_source`, and `record_feedback`. It uses the existing
+SQLite cold index and generated context packs rather than introducing a separate
+storage layer.
 
 ## A/B Route Experiment
 

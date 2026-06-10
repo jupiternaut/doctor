@@ -21,6 +21,7 @@ A/B route experiment and Arena evaluation layer:
 agent-context build     # ingest + hot context pack
 agent-context index     # JSONL manifests -> SQLite/FTS cold index
 agent-context query     # cold index -> RAG query context pack
+agent-context mcp       # stdio MCP server for local context tools
 agent-context compare   # Route A chunk pack vs Route B graph-lite map
 agent-context arena     # three randomized candidate answers for user choice
 agent-context feedback  # append the user's selected candidate
@@ -101,10 +102,50 @@ Still not implemented:
 neural embeddings
 ANN vector index
 reranking model
-MCP server
 automatic Codex query hook
 feedback-trained edge refresh
 ```
+
+## MCP Server Status
+
+Implemented command:
+
+```bash
+uv run agent-context mcp --out /Users/gengrf/agent-context-system
+```
+
+Exposed tools:
+
+```text
+search_context
+index_context
+build_hot_pack
+read_source
+record_feedback
+```
+
+Client config should use an absolute project path:
+
+```json
+{
+  "mcpServers": {
+    "agent-context": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "/Users/gengrf/agent-context-system",
+        "agent-context",
+        "mcp",
+        "--out",
+        "/Users/gengrf/agent-context-system"
+      ]
+    }
+  }
+}
+```
+
+The MCP layer is local stdio only. It does not expose HTTP or remote access.
 
 ## Repository
 

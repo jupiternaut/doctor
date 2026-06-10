@@ -9,6 +9,7 @@ from .cold_index import build_cold_index, query_cold_index
 from .compare import compare_routes
 from .ingest import ingest_scope, write_report, IngestPaths
 from .io import read_jsonl
+from .mcp_server import run_mcp_server
 from .pack import build_context_pack
 
 
@@ -74,6 +75,9 @@ def build_parser() -> argparse.ArgumentParser:
     feedback.add_argument("--winner", required=True, help="Winning candidate id, for example candidate-2.")
     feedback.add_argument("--reason", default="", help="Optional free-text reason for the choice.")
 
+    mcp = subparsers.add_parser("mcp", help="Run the agent-context MCP server over stdio.")
+    mcp.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
     return parser
 
 
@@ -104,6 +108,9 @@ def main(argv: list[str] | None = None) -> int:
         result = build_arena(Path(args.scope), out_root, args.goal, skip_ingest=args.skip_ingest)
     elif args.command == "feedback":
         result = record_feedback(Path(args.slate), args.winner, args.reason)
+    elif args.command == "mcp":
+        run_mcp_server(str(out_root))
+        return 0
     else:
         parser.error(f"unknown command: {args.command}")
 
