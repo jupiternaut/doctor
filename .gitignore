@@ -10,5 +10,4 @@ manifests/
 packs/
 reports/*
 !reports/.gitkeep
-!reports/*.md
-
+!reports/github_reuse_report.md

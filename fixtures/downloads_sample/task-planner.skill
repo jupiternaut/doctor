@@ -1,0 +1,10 @@
+---
+name: downloads-memory-planner
+description: Decide which Downloads files are candidates for personal assistant memory.
+---
+
+Use this skill when ranking local Downloads files for long-term memory.
+
+Prefer files that explain projects, workflows, accounts, local tools, or
+repeatable procedures. Avoid binary installers and archives unless their
+filename is itself useful evidence.

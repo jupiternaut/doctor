@@ -1,0 +1,6 @@
+{
+  "project": "agent-context-system",
+  "decision": "hot context packs should be small Markdown handoffs",
+  "cold_index": "JSONL manifests plus extracted Markdown",
+  "memory_candidates": ["workflow docs", "project notes", "verified local paths"]
+}
