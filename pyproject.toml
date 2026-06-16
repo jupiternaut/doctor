@@ -11,6 +11,12 @@ dependencies = [
 
 [project.scripts]
 agent-context = "agent_context.cli:main"
+doctor = "agent_context.cli:main"
+
+[project.optional-dependencies]
+embeddings = [
+  "fastembed>=0.3",
+]
 
 [dependency-groups]
 dev = [

@@ -110,6 +110,26 @@ def test_second_run_skips_unchanged_files(tmp_path: Path) -> None:
     assert any("unchanged; reused previous extraction" in record.get("warnings", []) for record in documents)
 
 
+def test_second_run_does_not_duplicate_chunks_for_same_hash_files(tmp_path: Path) -> None:
+    scope = tmp_path / "downloads"
+    scope.mkdir()
+    content = "personal assistant memory workflow\n"
+    (scope / "notes.md").write_text(content, encoding="utf-8")
+    (scope / "notes-copy.md").write_text(content, encoding="utf-8")
+    out = tmp_path / "out"
+
+    assert main(["build", "--scope", str(scope), "--goal", GOAL, "--out", str(out)]) == 0
+    first_chunks = read_jsonl(out / "manifests" / "chunks.jsonl")
+    assert main(["build", "--scope", str(scope), "--goal", GOAL, "--out", str(out)]) == 0
+    second_chunks = read_jsonl(out / "manifests" / "chunks.jsonl")
+
+    first_keys = {(chunk["doc_id"], chunk["path"], chunk["chunk_id"], chunk["chunk_index"]) for chunk in first_chunks}
+    second_keys = {(chunk["doc_id"], chunk["path"], chunk["chunk_id"], chunk["chunk_index"]) for chunk in second_chunks}
+    assert len(first_chunks) == 2
+    assert len(second_chunks) == 2
+    assert first_keys == second_keys
+
+
 def test_compare_creates_route_b_pack_and_report(tmp_path: Path) -> None:
     scope = copy_fixture(tmp_path)
     out = tmp_path / "out"
@@ -179,10 +199,34 @@ def test_arena_creates_three_candidates_and_feedback(tmp_path: Path) -> None:
 
     arena_feedback = read_jsonl(arena / "feedback.jsonl")
     global_feedback = read_jsonl(out / "feedback" / "arena_feedback.jsonl")
+    arena_eval_cases = read_jsonl(arena / "retrieval_eval_cases.jsonl")
+    global_eval_cases = read_jsonl(out / "feedback" / "retrieval_eval_cases.jsonl")
     assert arena_feedback
     assert global_feedback
+    assert arena_eval_cases
+    assert global_eval_cases
     assert arena_feedback[-1]["winner"] == "candidate-1"
     assert arena_feedback[-1]["reason"] == "test choice"
+    assert arena_feedback[-1]["query_family"]
+    assert len(arena_feedback[-1]["pairwise_comparisons"]) == 2
+    assert all("source_keys" in candidate for candidate in arena_feedback[-1]["candidates"])
+    assert global_eval_cases[-1]["origin"] == "arena_feedback"
+    assert global_eval_cases[-1]["query"] == GOAL
+    assert global_eval_cases[-1]["source"] == "downloads"
+    assert global_eval_cases[-1]["expected_sources"]
+    assert global_eval_cases[-1]["origin_id"] == arena_eval_cases[-1]["origin_id"]
+
+    model_path = out / "feedback" / "model.json"
+    model = json.loads(model_path.read_text(encoding="utf-8"))
+    assert model["pairwise_stats"]["comparisons"] == 2
+    assert model["query_family_source_scores"]
+
+    assert main(["feedback", "--slate", str(slate_json), "--winner", "candidate-1", "--reason", "test choice"]) == 0
+    assert len(read_jsonl(out / "feedback" / "retrieval_eval_cases.jsonl")) == len(global_eval_cases)
+
+    assert main(["retrieval-eval", "--out", str(out), "--source", "downloads", "--limit", "5"]) == 0
+    retrieval_reports = sorted((out / "reports").glob("retrieval_eval_*.json"))
+    assert retrieval_reports
 
 
 def test_cold_index_and_query_create_rag_pack(tmp_path: Path) -> None:
@@ -206,6 +250,9 @@ def test_cold_index_and_query_create_rag_pack(tmp_path: Path) -> None:
     assert chunk_count >= 1
     assert meta["index_version"] == "0.2"
     assert meta["embedding"].startswith("local-hash-vector-lite")
+    assert meta["embedding_backend"] == "hash-vector-lite"
+    assert meta["ann_backend"] == "exact-json-scan"
+    assert meta["rerank_backend"] == "none"
 
     assert main(["query", "--query", "task planner skill workflow", "--out", str(out), "--limit", "5"]) == 0
 

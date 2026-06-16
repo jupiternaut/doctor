@@ -119,9 +119,30 @@ Exposed tools:
 ```text
 search_context
 index_context
+resolve_context
+refresh_providers
+index_projects
+index_sessions
 build_hot_pack
 read_source
 record_feedback
+context_panel
+record_panel_feedback
+resolve_alternative_context
+feedback_replay
+feedback_replay_cases
+retrieval_eval
+retrieval_eval_cases
+route_selector_model
+semantic_refresh
+semantic_maintain
+semantic_benchmark
+semantic_ann_prune
+semantic_index_status
+semantic_launchd_status
+semantic_launchd_monitor
+semantic_launchd_audit
+semantic_launchd_trend
 ```
 
 Client config should use an absolute project path:

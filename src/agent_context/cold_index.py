@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import sqlite3
 from datetime import datetime
@@ -11,11 +12,25 @@ from pathlib import Path
 from .ingest import IngestPaths
 from .io import ensure_dir, read_jsonl, write_jsonl, write_text
 from .pack import slugify, snippet
+from .retrieval_backends import (
+    FASTEMBED_BACKEND_ID,
+    HASH_VECTOR_BACKEND_ID,
+    RetrievalConfig,
+    backend_meta,
+    default_retrieval_config,
+    dense_cosine,
+    decode_dense_vector,
+    embed_documents,
+    embedding_batch_size_for,
+    get_embedding_backend,
+)
 
 
 INDEX_VERSION = "0.2"
 EMBEDDING_DIMENSIONS = 384
 DEFAULT_QUERY_LIMIT = 12
+DEFAULT_RERANK_POOL_SIZE = 12
+DEFAULT_RERANK_TEXT_CHARS = 800
 STOP_TERMS = {
     "the",
     "and",
@@ -48,8 +63,9 @@ def index_path_for(out_root: Path) -> Path:
     return out_root.expanduser().resolve() / "indexes" / "context.sqlite"
 
 
-def build_cold_index(out_root: Path) -> dict:
+def build_cold_index(out_root: Path, *, retrieval_config: RetrievalConfig | None = None) -> dict:
     out_root = out_root.expanduser().resolve()
+    retrieval_config = retrieval_config or default_retrieval_config()
     paths = IngestPaths.from_root(out_root)
     documents = read_jsonl(paths.documents_jsonl)
     chunks = read_jsonl(paths.chunks_jsonl)
@@ -67,18 +83,21 @@ def build_cold_index(out_root: Path) -> dict:
     try:
         fts_enabled = create_schema(conn)
         insert_documents(conn, documents)
-        insert_chunks(conn, chunks, documents, fts_enabled)
+        insert_chunks(conn, chunks, documents, fts_enabled, retrieval_config=retrieval_config)
         insert_failures(conn, failures)
+        indexed_documents = conn.execute("SELECT count(*) FROM documents").fetchone()[0]
+        indexed_chunks = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
+        indexed_failures = conn.execute("SELECT count(*) FROM failures").fetchone()[0]
         write_meta(
             conn,
             {
                 "index_version": INDEX_VERSION,
                 "built_at": datetime.now().astimezone().isoformat(),
-                "documents": str(len(documents)),
-                "chunks": str(len(chunks)),
-                "failures": str(len(failures)),
+                "documents": str(indexed_documents),
+                "chunks": str(indexed_chunks),
+                "failures": str(indexed_failures),
                 "fts_enabled": "true" if fts_enabled else "false",
-                "embedding": f"local-hash-vector-lite-{EMBEDDING_DIMENSIONS}",
+                **backend_meta(retrieval_config),
             },
         )
         conn.commit()
@@ -88,11 +107,11 @@ def build_cold_index(out_root: Path) -> dict:
     return {
         "index_version": INDEX_VERSION,
         "index_path": str(db_path),
-        "documents": len(documents),
-        "chunks": len(chunks),
-        "failures": len(failures),
+        "documents": indexed_documents,
+        "chunks": indexed_chunks,
+        "failures": indexed_failures,
         "fts_enabled": fts_enabled,
-        "embedding": f"local-hash-vector-lite-{EMBEDDING_DIMENSIONS}",
+        **backend_meta(retrieval_config),
     }
 
 
@@ -257,60 +276,80 @@ def insert_documents(conn: sqlite3.Connection, documents: list[dict]) -> None:
     )
 
 
-def insert_chunks(conn: sqlite3.Connection, chunks: list[dict], documents: list[dict], fts_enabled: bool) -> None:
+def insert_chunks(
+    conn: sqlite3.Connection,
+    chunks: list[dict],
+    documents: list[dict],
+    fts_enabled: bool,
+    *,
+    retrieval_config: RetrievalConfig | None = None,
+) -> None:
+    embedding_backend = get_embedding_backend(retrieval_config)
+    batch_size = embedding_batch_size_for(embedding_backend)
     documents_by_path = {record["path"]: record for record in documents}
     documents_by_id: dict[str, dict] = {}
     for record in documents:
         documents_by_id.setdefault(record["doc_id"], record)
-    rows = []
-    fts_rows = []
-    for record in chunks:
-        doc = documents_by_path.get(record.get("path")) or documents_by_id.get(record["doc_id"], {})
-        source_id = source_id_for(doc) if doc else source_id_for({"doc_id": record.get("doc_id"), "path": record.get("path")})
-        source_chunk_id = source_chunk_id_for(source_id, record)
-        relative_path = doc.get("relative_path")
-        embedding_text = "\n".join([record.get("path", ""), relative_path or "", record.get("text", "")])
-        rows.append(
-            (
-                source_chunk_id,
-                record.get("chunk_id"),
-                source_id,
-                record.get("doc_id"),
-                record.get("path"),
-                relative_path,
-                record.get("chunk_index"),
-                record.get("char_start"),
-                record.get("char_end"),
-                record.get("token_estimate"),
-                record.get("text"),
-                encode_vector(vector_for(embedding_text)),
-                json.dumps(record, ensure_ascii=False, sort_keys=True),
-            )
-        )
-        fts_rows.append(
-            (
-                source_chunk_id,
-                record.get("doc_id"),
-                record.get("path"),
-                relative_path or "",
-                record.get("text", ""),
-            )
-        )
+    seen_source_chunk_ids: set[str] = set()
 
-    conn.executemany(
-        """
-        INSERT INTO chunks (
-          source_chunk_id, chunk_id, source_id, doc_id, path, relative_path, chunk_index, char_start,
-          char_end, token_estimate, text, embedding_json, metadata_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        rows,
-    )
-    if fts_enabled:
+    for start in range(0, len(chunks), batch_size):
+        row_prefixes = []
+        embedding_texts = []
+        fts_rows = []
+        for record in chunks[start : start + batch_size]:
+            doc = documents_by_path.get(record.get("path")) or documents_by_id.get(record["doc_id"], {})
+            source_id = source_id_for(doc) if doc else source_id_for({"doc_id": record.get("doc_id"), "path": record.get("path")})
+            source_chunk_id = source_chunk_id_for(source_id, record)
+            if source_chunk_id in seen_source_chunk_ids:
+                continue
+            seen_source_chunk_ids.add(source_chunk_id)
+            relative_path = doc.get("relative_path")
+            embedding_text = "\n".join([record.get("path", ""), relative_path or "", record.get("text", "")])
+            embedding_texts.append(embedding_text)
+            row_prefixes.append(
+                (
+                    source_chunk_id,
+                    record.get("chunk_id"),
+                    source_id,
+                    record.get("doc_id"),
+                    record.get("path"),
+                    relative_path,
+                    record.get("chunk_index"),
+                    record.get("char_start"),
+                    record.get("char_end"),
+                    record.get("token_estimate"),
+                    record.get("text"),
+                    json.dumps(record, ensure_ascii=False, sort_keys=True),
+                )
+            )
+            fts_rows.append(
+                (
+                    source_chunk_id,
+                    record.get("doc_id"),
+                    record.get("path"),
+                    relative_path or "",
+                    record.get("text", ""),
+                )
+            )
+
+        if not embedding_texts:
+            continue
+        embedding_jsons = embed_documents(embedding_backend, embedding_texts)
+        rows = [(*row_prefix[:-1], embedding_json, row_prefix[-1]) for row_prefix, embedding_json in zip(row_prefixes, embedding_jsons)]
         conn.executemany(
-            "INSERT INTO chunks_fts (chunk_id, doc_id, path, relative_path, text) VALUES (?, ?, ?, ?, ?)",
-            fts_rows,
+            """
+            INSERT INTO chunks (
+              source_chunk_id, chunk_id, source_id, doc_id, path, relative_path, chunk_index, char_start,
+              char_end, token_estimate, text, embedding_json, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
         )
+        if fts_enabled:
+            conn.executemany(
+                "INSERT INTO chunks_fts (chunk_id, doc_id, path, relative_path, text) VALUES (?, ?, ?, ?, ?)",
+                fts_rows,
+            )
 
 
 def insert_failures(conn: sqlite3.Connection, failures: list[dict]) -> None:
@@ -341,20 +380,44 @@ def write_meta(conn: sqlite3.Connection, values: dict[str, str]) -> None:
     conn.executemany("INSERT INTO meta (key, value) VALUES (?, ?)", sorted(values.items()))
 
 
-def query_cold_index(out_root: Path, query: str, *, limit: int = DEFAULT_QUERY_LIMIT) -> dict:
+def search_cold_index(
+    out_root: Path,
+    query: str,
+    limit: int = DEFAULT_QUERY_LIMIT,
+    *,
+    retrieval_config: RetrievalConfig | None = None,
+) -> dict:
     out_root = out_root.expanduser().resolve()
     db_path = index_path_for(out_root)
     if not db_path.exists():
-        build_cold_index(out_root)
+        build_cold_index(out_root, retrieval_config=retrieval_config)
 
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
         meta = read_meta(conn)
-        candidates = retrieve_candidates(conn, query, max(1, limit), meta)
+        candidates = retrieve_candidates(conn, query, max(1, limit), meta, retrieval_config=retrieval_config)
         sources = render_sources(candidates[:limit])
     finally:
         conn.close()
+
+    return {
+        "query": query,
+        "index_path": str(db_path),
+        "retrieval_mode": "hybrid_fts_vector_lite_path",
+        "limit": limit,
+        "sources_included": len(sources),
+        "sources": sources,
+        "index_meta": meta,
+    }
+
+
+def query_cold_index(out_root: Path, query: str, *, limit: int = DEFAULT_QUERY_LIMIT) -> dict:
+    out_root = out_root.expanduser().resolve()
+    search_result = search_cold_index(out_root, query, limit)
+    db_path = Path(search_result["index_path"])
+    sources = search_result["sources"]
+    meta = search_result["index_meta"]
 
     created_at = datetime.now().astimezone().isoformat()
     query_id = f"{slugify(query)}-rag-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -397,7 +460,15 @@ def read_meta(conn: sqlite3.Connection) -> dict[str, str]:
     return {row["key"]: row["value"] for row in conn.execute("SELECT key, value FROM meta")}
 
 
-def retrieve_candidates(conn: sqlite3.Connection, query: str, limit: int, meta: dict[str, str]) -> list[dict]:
+def retrieve_candidates(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int,
+    meta: dict[str, str],
+    *,
+    retrieval_config: RetrievalConfig | None = None,
+) -> list[dict]:
+    retrieval_config = retrieval_config or default_retrieval_config()
     chunk_rows = {row["source_chunk_id"]: dict(row) for row in conn.execute("SELECT * FROM chunks")}
     document_rows = {row["source_id"]: dict(row) for row in conn.execute("SELECT * FROM documents")}
     candidates: dict[str, dict] = {}
@@ -408,7 +479,7 @@ def retrieve_candidates(conn: sqlite3.Connection, query: str, limit: int, meta: 
             candidate["score_parts"]["fts"] = score
             candidates[source_chunk_id] = candidate
 
-    for source_chunk_id, score in vector_scores(chunk_rows, query, limit * 8).items():
+    for source_chunk_id, score in vector_scores(chunk_rows, query, limit * 8, meta, retrieval_config=retrieval_config).items():
         candidate = candidates.get(source_chunk_id) or candidate_for_chunk(chunk_rows[source_chunk_id], document_rows)
         candidate["score_parts"]["vector"] = score
         candidates[source_chunk_id] = candidate
@@ -445,6 +516,7 @@ def retrieve_candidates(conn: sqlite3.Connection, query: str, limit: int, meta: 
         ranked.append(candidate)
 
     ranked.sort(key=lambda item: (-item["score"], item.get("path") or "", item.get("chunk_index") or 0))
+    ranked = rerank_candidates(query, ranked, limit, retrieval_config)
     return diversify_by_source(ranked)
 
 
@@ -547,26 +619,76 @@ def fts_scores(conn: sqlite3.Connection, query: str, limit: int, meta: dict[str,
     return {row["chunk_id"]: (denominator - index) / denominator for index, row in enumerate(rows)}
 
 
-def vector_scores(chunk_rows: dict[str, dict], query: str, limit: int) -> dict[str, float]:
-    query_vector = query_vector_for(query)
-    if not query_vector:
-        return {}
-    terms = set(query_terms(query))
-    scored = []
-    for source_chunk_id, row in chunk_rows.items():
-        haystack = " ".join([row.get("path") or "", row.get("relative_path") or "", row.get("text") or ""]).lower()
-        overlap = sum(1 for term in terms if term in haystack)
-        if overlap == 0:
-            continue
-        score = cosine(query_vector, decode_vector(row["embedding_json"]))
-        if score > 0:
-            scored.append((score * min(1.0, overlap / 3.0), source_chunk_id))
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    top = scored[:limit]
-    if not top:
-        return {}
-    max_score = max(score for score, _ in top) or 1.0
-    return {source_chunk_id: score / max_score for score, source_chunk_id in top}
+def vector_scores(
+    chunk_rows: dict[str, dict],
+    query: str,
+    limit: int,
+    meta: dict[str, str],
+    *,
+    retrieval_config: RetrievalConfig | None = None,
+) -> dict[str, float]:
+    config = retrieval_config or default_retrieval_config()
+    stored_backend = meta.get("embedding_backend") or config.embedding_backend or HASH_VECTOR_BACKEND_ID
+    stored_config = RetrievalConfig(
+        embedding_backend=stored_backend,
+        ann_backend=config.ann_backend,
+        rerank_backend=config.rerank_backend,
+    )
+    return get_embedding_backend(stored_config).score_rows(chunk_rows, query, limit)
+
+
+def rerank_candidates(query: str, ranked: list[dict], requested_limit: int, retrieval_config: RetrievalConfig) -> list[dict]:
+    if retrieval_config.rerank_backend != FASTEMBED_BACKEND_ID or not ranked:
+        return ranked
+    pool_size = rerank_pool_size_for(requested_limit)
+    pool = ranked[:pool_size]
+    backend = get_embedding_backend(RetrievalConfig(embedding_backend=FASTEMBED_BACKEND_ID))
+    texts = [query] + [rerank_text_for(candidate) for candidate in pool]
+    vectors = [decode_dense_vector(payload) for payload in embed_documents(backend, texts)]
+    if not vectors or not vectors[0]:
+        return ranked
+    query_vector = vectors[0]
+    scores = [max(0.0, dense_cosine(query_vector, vector)) for vector in vectors[1:]]
+    max_score = max(scores) if scores else 0.0
+    if max_score <= 0:
+        return ranked
+    for candidate, score in zip(pool, scores):
+        normalized = score / max_score
+        candidate["score_parts"]["rerank"] = round(normalized, 6)
+        candidate["score"] = round(candidate["score"] * 0.75 + normalized * 0.25, 6)
+    reranked_pool = sorted(pool, key=lambda item: (-item["score"], item.get("path") or "", item.get("chunk_index") or 0))
+    return reranked_pool + ranked[len(pool) :]
+
+
+def rerank_text_for(candidate: dict) -> str:
+    max_chars = rerank_text_chars()
+    return "\n".join(
+        [
+            candidate.get("path") or "",
+            candidate.get("relative_path") or "",
+            (candidate.get("text") or "")[:max_chars],
+        ]
+    )
+
+
+def rerank_pool_size_for(requested_limit: int) -> int:
+    configured = os.environ.get("AGENT_CONTEXT_RERANK_POOL")
+    if configured:
+        try:
+            return max(1, int(configured))
+        except ValueError:
+            pass
+    return max(1, min(max(requested_limit, DEFAULT_RERANK_POOL_SIZE), requested_limit * 2))
+
+
+def rerank_text_chars() -> int:
+    configured = os.environ.get("AGENT_CONTEXT_RERANK_TEXT_CHARS")
+    if configured:
+        try:
+            return max(80, int(configured))
+        except ValueError:
+            pass
+    return DEFAULT_RERANK_TEXT_CHARS
 
 
 def path_scores(chunk_rows: dict[str, dict], document_rows: dict[str, dict], query: str, limit: int) -> dict[str, float]:

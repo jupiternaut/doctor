@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .compare import build_graph_context_pack
+from .feedback_model import query_family_for_text, write_feedback_model
 from .ingest import ingest_scope
 from .io import ensure_dir, read_jsonl, write_jsonl, write_text
 from .pack import build_context_pack, metadata_snippet, slugify, snippet, terms_for
@@ -15,6 +16,8 @@ from .pack import build_context_pack, metadata_snippet, slugify, snippet, terms_
 
 ARENA_VERSION = "0.1"
 EXPLORE_SOURCE_LIMIT = 20
+RETRIEVAL_EVAL_CASES_FILENAME = "retrieval_eval_cases.jsonl"
+MAX_RETRIEVAL_EVAL_EXPECTED_SOURCES = 64
 
 
 def build_arena(scope: Path, out_root: Path, goal: str, *, skip_ingest: bool = False) -> dict:
@@ -438,23 +441,42 @@ def record_feedback(slate_path: Path, winner: str, reason: str = "") -> dict:
 
     created_at = datetime.now().astimezone().isoformat()
     winner_record = next(candidate for candidate in candidates if candidate["candidate_id"] == winner)
-    feedback = {
-        "arena_version": slate.get("arena_version"),
-        "arena_id": slate.get("arena_id"),
-        "goal": slate.get("goal"),
-        "scope": slate.get("scope"),
-        "winner": winner,
-        "winner_route": winner_record.get("route"),
-        "reason": reason,
-        "created_at": created_at,
-        "candidates": [
+    winner_sources = feedback_source_keys(winner_record)
+    candidate_feedback_records = []
+    for candidate in candidates:
+        source_keys = feedback_source_keys(candidate)
+        candidate_feedback_records.append(
             {
                 "candidate_id": candidate["candidate_id"],
                 "route": candidate.get("route"),
                 "selected": candidate["candidate_id"] == winner,
+                "source_keys": source_keys,
+                "source_count": len(source_keys),
             }
-            for candidate in candidates
-        ],
+        )
+    pairwise_comparisons = [
+        {
+            "winner": winner,
+            "loser": candidate["candidate_id"],
+            "winner_route": winner_record.get("route"),
+            "loser_route": candidate.get("route"),
+        }
+        for candidate in candidates
+        if candidate["candidate_id"] != winner
+    ]
+    feedback = {
+        "arena_version": slate.get("arena_version"),
+        "arena_id": slate.get("arena_id"),
+        "goal": slate.get("goal"),
+        "query_family": query_family_for_text(slate.get("goal")),
+        "scope": slate.get("scope"),
+        "winner": winner,
+        "winner_route": winner_record.get("route"),
+        "winner_sources": winner_sources,
+        "reason": reason,
+        "created_at": created_at,
+        "pairwise_comparisons": pairwise_comparisons,
+        "candidates": candidate_feedback_records,
     }
 
     arena_feedback_path = slate_path.parent / "feedback.jsonl"
@@ -463,13 +485,113 @@ def record_feedback(slate_path: Path, winner: str, reason: str = "") -> dict:
     out_root = slate_path.parent.parent.parent
     global_feedback_path = out_root / "feedback" / "arena_feedback.jsonl"
     append_jsonl(global_feedback_path, feedback)
+    feedback_model = write_feedback_model(out_root)
+    retrieval_eval_case = write_arena_retrieval_eval_case(
+        slate,
+        winner_record,
+        feedback,
+        out_root=out_root,
+        arena_dir=slate_path.parent,
+    )
 
     return {
         "arena_feedback_path": str(arena_feedback_path),
         "global_feedback_path": str(global_feedback_path),
+        "feedback_model_path": feedback_model["feedback_model_path"],
+        "retrieval_eval_cases_path": retrieval_eval_case["global_path"],
+        "retrieval_eval_cases_written": retrieval_eval_case["written"],
+        "pairwise_comparisons": len(pairwise_comparisons),
         "winner": winner,
         "winner_route": winner_record.get("route"),
+        "winner_sources": winner_sources,
     }
+
+
+def feedback_source_keys(candidate: dict) -> list[str]:
+    sources_path = candidate.get("sources_jsonl_path")
+    if not sources_path:
+        return []
+    keys = []
+    for source in read_jsonl(Path(sources_path)):
+        for field in ("path", "relative_path", "source_id", "source_chunk_id", "doc_id"):
+            value = source.get(field)
+            if value:
+                keys.append(str(value))
+    return list(dict.fromkeys(keys))
+
+
+def write_arena_retrieval_eval_case(
+    slate: dict,
+    winner_record: dict,
+    feedback: dict,
+    *,
+    out_root: Path,
+    arena_dir: Path,
+) -> dict:
+    case = arena_retrieval_eval_case(slate, winner_record, feedback)
+    global_path = out_root / "feedback" / RETRIEVAL_EVAL_CASES_FILENAME
+    arena_path = arena_dir / RETRIEVAL_EVAL_CASES_FILENAME
+    if not case["expected_sources"]:
+        return {"written": 0, "global_path": str(global_path), "arena_path": str(arena_path), "case": case}
+
+    written = 0
+    for path in (arena_path, global_path):
+        if retrieval_eval_case_exists(path, case["origin_id"]):
+            continue
+        append_jsonl(path, case)
+        written += 1
+    return {"written": written, "global_path": str(global_path), "arena_path": str(arena_path), "case": case}
+
+
+def arena_retrieval_eval_case(slate: dict, winner_record: dict, feedback: dict) -> dict:
+    sources = read_jsonl(Path(winner_record["sources_jsonl_path"])) if winner_record.get("sources_jsonl_path") else []
+    expected_sources = retrieval_eval_expected_sources(sources)
+    arena_id = str(slate.get("arena_id") or "")
+    winner = str(feedback.get("winner") or "")
+    return {
+        "query": str(slate.get("goal") or ""),
+        "source": infer_retrieval_eval_source(slate, sources),
+        "expected_sources": expected_sources,
+        "notes": str(feedback.get("reason") or ""),
+        "origin": "arena_feedback",
+        "origin_id": f"arena:{arena_id}:{winner}",
+        "arena_id": arena_id,
+        "winner": winner,
+        "winner_route": winner_record.get("route"),
+        "query_family": feedback.get("query_family"),
+        "created_at": feedback.get("created_at"),
+    }
+
+
+def retrieval_eval_expected_sources(sources: list[dict]) -> list[str]:
+    values = []
+    for source in unique_sources_by_path(sources):
+        for field in ("path", "relative_path", "source_chunk_id", "source_id", "doc_id", "project_name"):
+            value = source.get(field)
+            if value:
+                values.append(str(value))
+    return list(dict.fromkeys(values))[:MAX_RETRIEVAL_EVAL_EXPECTED_SOURCES]
+
+
+def infer_retrieval_eval_source(slate: dict, sources: list[dict]) -> str:
+    source_markers = {
+        str(source.get("source_group") or source.get("provider") or source.get("type") or "")
+        for source in sources
+    }
+    if source_markers & {"git_repositories", "project_code_index", "project_code", "git_project"}:
+        return "projects"
+    if any("project" in marker for marker in source_markers):
+        return "projects"
+    scope = str(slate.get("scope") or "").lower()
+    if "downloads" in scope or "下载" in scope:
+        return "downloads"
+    return "downloads"
+
+
+def retrieval_eval_case_exists(path: Path, origin_id: str) -> bool:
+    if not origin_id:
+        return False
+    return any(record.get("origin_id") == origin_id for record in read_jsonl(path))
 
 
 def append_jsonl(path: Path, record: dict) -> None:

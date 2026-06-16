@@ -30,6 +30,13 @@ def write_jsonl(path: Path, records: Iterable[dict]) -> None:
             handle.write("\n")
 
 
+def append_jsonl(path: Path, record: dict) -> None:
+    ensure_dir(path.parent)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
+        handle.write("\n")
+
+
 def write_text(path: Path, text: str) -> None:
     ensure_dir(path.parent)
     path.write_text(text, encoding="utf-8")

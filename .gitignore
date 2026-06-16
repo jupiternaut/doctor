@@ -14,3 +14,10 @@ queries/
 reports/*
 !reports/.gitkeep
 !reports/github_reuse_report.md
+
+# Local runtime state and generated UI snapshots.
+logs/
+_review_locks/
+panel/status.json
+panel/context_panel.html
+PROJECT_TASK_README.md

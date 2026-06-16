@@ -1,0 +1,45 @@
+{
+  "access_policy_version": "0.1",
+  "allow_providers": [
+    "direct_text",
+    "markitdown",
+    "metadata_only",
+    "project_code_index",
+    "session_index",
+    "semantic_index",
+    "git_project",
+    "workflow_doc",
+    "codex_session",
+    "claude_session"
+  ],
+  "audit_max_bytes": 5000000,
+  "audit_max_rotated_files": 3,
+  "deny_path_patterns": [
+    "*/.ssh/*",
+    "*/.gnupg/*",
+    "*/Library/Keychains/*",
+    "*/.aws/credentials",
+    "*/.config/gcloud/*",
+    "*/id_rsa",
+    "*/id_ed25519",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.mobileprovision",
+    "*.env",
+    "*.env.*",
+    "*/.env",
+    "*/.env.*",
+    "*/.npmrc",
+    "*/.netrc"
+  ],
+  "deny_providers": [],
+  "notes": [
+    "deny_path_patterns use fnmatch against absolute POSIX paths and basenames",
+    "require_consent_path_patterns use the same matching rules but only affect read_source",
+    "deny rules win over allow rules",
+    "raw path reads outside --out are rejected by MCP read_source even when not listed here"
+  ],
+  "require_consent_path_patterns": [],
+  "require_consent_providers": []
+}

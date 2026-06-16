@@ -63,9 +63,15 @@ def ingest_scope(scope: Path, out_root: Path) -> dict:
         ensure_dir(directory)
 
     previous_docs = {record["path"]: record for record in read_jsonl(paths.documents_jsonl)}
-    previous_chunks_by_doc: dict[str, list[dict]] = {}
+    previous_chunks_by_doc: dict[tuple[str, str], list[dict]] = {}
+    seen_previous_chunks: set[tuple[str, str, object, object]] = set()
     for chunk in read_jsonl(paths.chunks_jsonl):
-        previous_chunks_by_doc.setdefault(chunk["doc_id"], []).append(chunk)
+        key = (chunk["doc_id"], chunk.get("path") or "")
+        chunk_key = (chunk["doc_id"], chunk.get("path") or "", chunk.get("chunk_id"), chunk.get("chunk_index"))
+        if chunk_key in seen_previous_chunks:
+            continue
+        seen_previous_chunks.add(chunk_key)
+        previous_chunks_by_doc.setdefault(key, []).append(chunk)
 
     documents: list[dict] = []
     chunks: list[dict] = []
@@ -130,7 +136,7 @@ def ingest_one(
     scope: Path,
     paths: IngestPaths,
     previous_docs: dict[str, dict],
-    previous_chunks_by_doc: dict[str, list[dict]],
+    previous_chunks_by_doc: dict[tuple[str, str], list[dict]],
 ) -> tuple[dict, list[dict], list[dict]]:
     stat = file_path.stat()
     extension = extension_for(file_path)
@@ -166,7 +172,7 @@ def ingest_one(
         record = dict(previous)
         record["status"] = "skipped"
         record["warnings"] = sorted(set(record.get("warnings", []) + ["unchanged; reused previous extraction"]))
-        return record, previous_chunks_by_doc.get(doc_id, []), []
+        return record, previous_chunks_by_doc.get((doc_id, str(file_path)), []), []
 
     if policy.policy == "metadata_only":
         record = dict(base_record)

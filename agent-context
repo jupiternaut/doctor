@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-from agent_context.cli import main
+#!/usr/bin/env bash
+set -euo pipefail
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec uv run --project "$SCRIPT_DIR" agent-context "$@"

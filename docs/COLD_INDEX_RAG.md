@@ -86,20 +86,25 @@ agent assets such as `SKILL.md`, workflow docs, context docs, handoff files, MCP
 notes, and task-planner assets. This keeps the result aligned with the local
 agent-memory use case without pretending to be semantic understanding.
 
-## What It Is Not Yet
+## What It Was Not In v0.2
 
-Not implemented in v0.2:
+Not implemented in the earlier v0.2 slice:
 
 ```text
 remote embeddings
-local embedding model
-ANN index such as sqlite-vec/faiss/hnswlib
+mandatory local embedding model
+mandatory ANN index such as sqlite-vec/faiss/hnswlib
 reranker model
 MCP server
 automatic Codex query hook
 OCR/audio/video transcription
 feedback-trained ranking
 ```
+
+Current v1.0 work has since added optional background FastEmbed semantic
+indexes, optional hnswlib ANN cache with exact fallback, MCP tools, Codex++
+preflight injection, and feedback priors. OCR/audio/video transcription and a
+true reranker model remain outside the implemented slice.
 
 The current embedding is intentionally swappable. A future version can replace
 `local-hash-vector-lite` with `sqlite-vec`, `faiss`, `hnswlib`, or a local
