@@ -40,11 +40,12 @@ def run_v1_acceptance(
     mcp_timeout_seconds: int = 60,
     codex_plus_timeout_seconds: int = 120,
     with_manager_feedback_smoke: bool = False,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     out_root = out_root.expanduser().resolve()
     codex_plus = codex_plus_root.expanduser().resolve() if codex_plus_root else None
     snapshot_roots = [root for root in [out_root, codex_plus] if root is not None]
-    created_at = datetime.now().astimezone()
+    created_at = (now or datetime.now()).astimezone()
     refreshed_reports: dict[str, Any] = {}
     if refresh_evidence:
         refreshed_reports["semantic_launchd_monitor"] = compact_refresh_result(

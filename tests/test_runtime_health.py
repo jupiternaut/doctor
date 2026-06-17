@@ -218,7 +218,11 @@ def test_v1_acceptance_report_marks_time_gated_semantic_readiness(tmp_path: Path
     run_reproducibility_snapshot(out, roots=[out, codex_plus])
     run_runtime_health(out, codex_plus_root=codex_plus)
 
-    result = run_v1_acceptance(out, codex_plus_root=codex_plus)
+    result = run_v1_acceptance(
+        out,
+        codex_plus_root=codex_plus,
+        now=datetime.fromisoformat("2026-06-16T09:00:00+08:00"),
+    )
 
     assert result["v1_acceptance_version"] == "0.1"
     assert result["status"] == "waiting_for_time"
@@ -285,6 +289,11 @@ def test_v1_acceptance_report_marks_time_gated_semantic_readiness(tmp_path: Path
     assert mcp_followup["action"] == "wait"
     assert mcp_followup["wait_reason"]
 
+    run_v1_followup(
+        out,
+        codex_plus_root=codex_plus,
+        now=datetime.fromisoformat("2026-06-16T09:00:00+08:00"),
+    )
     stage_status = run_v1_stage_status(out, codex_plus_root=codex_plus)
     assert stage_status["v1_stage_status_version"] == "0.1"
     assert stage_status["status"] == "waiting_for_time"

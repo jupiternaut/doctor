@@ -12,6 +12,7 @@ dependencies = [
 [project.scripts]
 agent-context = "agent_context.cli:main"
 doctor = "agent_context.cli:main"
+doctor-douyin = "agent_context.douyin:main"
 
 [project.optional-dependencies]
 embeddings = [
