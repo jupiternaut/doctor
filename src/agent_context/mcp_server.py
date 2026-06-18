@@ -1689,7 +1689,7 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
         with_manager_feedback: bool = False,
         with_runtime: bool = False,
     ) -> dict[str, Any]:
-        """Run headless Codex++ Agent Context smoke scripts and write a report."""
+        """Run Codex++ Agent Context smoke scripts and write a report."""
         return mcp_codex_plus_smoke(
             out_root=str(root),
             codex_plus_root=codex_plus_root,

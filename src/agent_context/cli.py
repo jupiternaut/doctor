@@ -284,7 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     v1_acceptance.add_argument(
         "--with-manager-feedback-smoke",
         action="store_true",
-        help="When refreshing evidence, also run the Codex++ Manager render smoke.",
+        help="When refreshing evidence, also run the Codex++ Manager feedback replay contract smoke.",
     )
 
     v1_followup = subparsers.add_parser("v1-followup", help="Check or safely run the v1 acceptance follow-up gate.")
@@ -303,7 +303,7 @@ def build_parser() -> argparse.ArgumentParser:
     v1_followup.add_argument(
         "--with-manager-feedback-smoke",
         action="store_true",
-        help="When refreshing evidence, also run the Codex++ Manager render smoke.",
+        help="When refreshing evidence, also run the Codex++ Manager feedback replay contract smoke.",
     )
 
     v1_refresh = subparsers.add_parser("v1-refresh", help="Safely refresh v1 follow-up, stage status, and panel status.")
@@ -343,18 +343,18 @@ def build_parser() -> argparse.ArgumentParser:
     v1_refresh.add_argument(
         "--with-manager-feedback-smoke",
         action="store_true",
-        help="When refreshing evidence, also run the Codex++ Manager render smoke.",
+        help="When refreshing evidence, also run the Codex++ Manager feedback replay contract smoke.",
     )
 
     v1_stage_status = subparsers.add_parser("v1-stage-status", help="Write a compact v1 stage progress report from latest evidence.")
     v1_stage_status.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     v1_stage_status.add_argument("--codex-plus-root", default=None, help="Optional Codex++ repo root for report metadata.")
 
-    codex_plus_smoke = subparsers.add_parser("codex-plus-smoke", help="Run headless Codex++ Agent Context smoke scripts and write a report.")
+    codex_plus_smoke = subparsers.add_parser("codex-plus-smoke", help="Run Codex++ Agent Context smoke scripts and write a report.")
     codex_plus_smoke.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     codex_plus_smoke.add_argument("--codex-plus-root", default=None, help="Codex++ repo root. Defaults to the known local checkout.")
     codex_plus_smoke.add_argument("--timeout-seconds", type=int, default=120, help="Maximum seconds per smoke script.")
-    codex_plus_smoke.add_argument("--with-manager-feedback", action="store_true", help="Also run the Manager feedback replay UI smoke.")
+    codex_plus_smoke.add_argument("--with-manager-feedback", action="store_true", help="Also run the Manager feedback replay contract smoke.")
     codex_plus_smoke.add_argument("--with-runtime", action="store_true", help="Also run the Codex++ GUI runtime smoke; this may launch Codex.app.")
 
     semantic_readiness = subparsers.add_parser("semantic-readiness", help="Write a focused semantic background readiness report.")

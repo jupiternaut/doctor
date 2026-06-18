@@ -327,15 +327,15 @@ Use `mcp-live-smoke` when you need proof that an MCP client, not only in-process
 Python functions, can initialize the stdio server, list tools, call
 `runtime_health`, call `v1_acceptance`, and read a generated report through
 `read_source`. Add `--with-manager-feedback-smoke` for final/release evidence so
-the MCP smoke preserves the stronger Codex++ Manager render-smoke requirement
-when it calls v1 tools.
+the MCP smoke preserves the stronger Codex++ Manager feedback-replay contract
+requirement when it calls v1 tools.
 
-Use `codex-plus-smoke` for a headless Codex++ integration check. By default it
+Use `codex-plus-smoke` for a Codex++ integration check. By default it
 runs `scripts/smoke-agent-context-panel-status.mjs`, proving Codex++ core and
 Manager consume `panel/status.json` without launching Codex.app. Pass
 `--with-manager-feedback` when release evidence should include the Manager
-render smoke and screenshot. Pass `--with-runtime` only when you explicitly want
-the GUI runtime smoke.
+feedback replay source/status contract evidence. Pass `--with-runtime` only
+when you explicitly want the GUI runtime smoke.
 
 ## Access Policy
 
