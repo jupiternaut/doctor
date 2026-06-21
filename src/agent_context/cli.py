@@ -9,6 +9,7 @@ from .acceptance import run_v1_acceptance, run_v1_followup, run_v1_refresh, run_
 from .alternatives import resolve_alternative_context
 from .arena import build_arena, record_feedback
 from .codex_hook import build_codex_preflight
+from .codebase_memory import build_codebase_memory_index, search_codebase_memory
 from .cold_index import build_cold_index, query_cold_index
 from .codex_plus_smoke import run_codex_plus_smoke
 from .compare import compare_routes
@@ -44,6 +45,9 @@ from .semantic_index import run_semantic_refresh, semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
 from .semantic import semantic_status
 from .session_index import build_session_index
+
+
+SOURCE_SCOPE_CHOICES = ["downloads", "gitProjects", "codebaseMemory", "codexSessions", "agentSessions", "workflowDocs", "all"]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--limit", type=int, default=12, help="Maximum sources to include.")
     resolve.add_argument(
         "--source-scope",
-        choices=["downloads", "gitProjects", "codexSessions", "agentSessions", "workflowDocs", "all"],
+        choices=SOURCE_SCOPE_CHOICES,
         default="all",
         help="Restrict resolver source families. Defaults to all.",
     )
@@ -102,7 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     resolve_alternative.add_argument("--limit", type=int, default=12, help="Maximum sources to include.")
     resolve_alternative.add_argument(
         "--source-scope",
-        choices=["downloads", "gitProjects", "codexSessions", "agentSessions", "workflowDocs", "all"],
+        choices=SOURCE_SCOPE_CHOICES,
         default="all",
         help="Restrict resolver source families. Defaults to all.",
     )
@@ -113,7 +117,7 @@ def build_parser() -> argparse.ArgumentParser:
     codex_preflight.add_argument("--limit", type=int, default=12, help="Maximum sources to include.")
     codex_preflight.add_argument(
         "--source-scope",
-        choices=["downloads", "gitProjects", "codexSessions", "agentSessions", "workflowDocs", "all"],
+        choices=SOURCE_SCOPE_CHOICES,
         default="all",
         help="Restrict resolver source families. Defaults to all.",
     )
@@ -126,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     panel.add_argument("--limit", type=int, default=12, help="Maximum sources to include when --goal is provided.")
     panel.add_argument(
         "--source-scope",
-        choices=["downloads", "gitProjects", "codexSessions", "agentSessions", "workflowDocs", "all"],
+        choices=SOURCE_SCOPE_CHOICES,
         default="all",
         help="Restrict resolver source families when --goal is provided.",
     )
@@ -171,6 +175,25 @@ def build_parser() -> argparse.ArgumentParser:
     index_projects.add_argument("--max-projects", type=int, default=300, help="Maximum projects to index.")
     index_projects.add_argument("--max-files-per-project", type=int, default=300, help="Maximum files to index per project.")
 
+    codebase_memory_index = subparsers.add_parser(
+        "codebase-memory-index",
+        help="Build the Doctor extracted Markdown pseudo repo and optionally index it with codebase-memory-mcp.",
+    )
+    codebase_memory_index.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    codebase_memory_index.add_argument("--repo-path", action="append", default=None, help="Extra repository path to index with codebase-memory-mcp. Can be passed more than once.")
+    codebase_memory_index.add_argument("--binary", default=None, help="Optional codebase-memory-mcp binary path. Defaults to PATH or AGENT_CONTEXT_CODEBASE_MEMORY_BIN.")
+    codebase_memory_index.add_argument("--timeout-seconds", type=int, default=120, help="Maximum seconds per external tool call.")
+
+    codebase_memory_search = subparsers.add_parser(
+        "codebase-memory-search",
+        help="Search the optional codebase-memory-mcp provider and print Doctor-shaped sources.",
+    )
+    codebase_memory_search.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    codebase_memory_search.add_argument("--query", required=True, help="Search query.")
+    codebase_memory_search.add_argument("--limit", type=int, default=12, help="Maximum sources to return.")
+    codebase_memory_search.add_argument("--binary", default=None, help="Optional codebase-memory-mcp binary path. Defaults to PATH or AGENT_CONTEXT_CODEBASE_MEMORY_BIN.")
+    codebase_memory_search.add_argument("--timeout-seconds", type=int, default=120, help="Maximum seconds per external tool call.")
+
     index_sessions = subparsers.add_parser("index-sessions", help="Index Codex/Claude session transcript previews into indexes/sessions.sqlite.")
     index_sessions.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     index_sessions.add_argument("--max-sessions", type=int, default=300, help="Maximum session provider cards to index.")
@@ -211,7 +234,7 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_replay.add_argument("--limit", type=int, default=12, help="Maximum sources to compare per case.")
     feedback_replay.add_argument(
         "--source-scope",
-        choices=["downloads", "gitProjects", "codexSessions", "agentSessions", "workflowDocs", "all"],
+        choices=SOURCE_SCOPE_CHOICES,
         default="all",
         help="Default source scope for inline cases.",
     )
@@ -222,7 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_replay_cases.add_argument("--limit", type=int, default=12, help="Maximum sources to compare per generated case.")
     feedback_replay_cases.add_argument(
         "--source-scope",
-        choices=["downloads", "gitProjects", "codexSessions", "agentSessions", "workflowDocs", "all"],
+        choices=SOURCE_SCOPE_CHOICES,
         default="all",
         help="Default source scope when a feedback record does not imply one.",
     )
@@ -610,6 +633,22 @@ def main(argv: list[str] | None = None) -> int:
             project_roots=project_roots,
             max_projects=max(1, args.max_projects),
             max_files_per_project=max(1, args.max_files_per_project),
+        )
+    elif args.command == "codebase-memory-index":
+        repo_paths = [Path(value) for value in args.repo_path] if args.repo_path else None
+        result = build_codebase_memory_index(
+            out_root,
+            repo_paths=repo_paths,
+            binary=args.binary,
+            timeout_seconds=max(1, args.timeout_seconds),
+        )
+    elif args.command == "codebase-memory-search":
+        result = search_codebase_memory(
+            out_root,
+            args.query,
+            limit=max(1, args.limit),
+            binary=args.binary,
+            timeout_seconds=max(1, args.timeout_seconds),
         )
     elif args.command == "index-sessions":
         result = build_session_index(

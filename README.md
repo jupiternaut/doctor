@@ -48,8 +48,9 @@ The CLI supports v0.1 document ingestion and hot context packs, a v0.2 local
 cold index/RAG slice using SQLite, FTS5, and pluggable deterministic
 hash-vector-lite retrieval, plus a v0.5 context resolver. The resolver can route
 across Downloads, workflow provider cards, project provider cards, project code
-indexes, Codex/Claude session provider cards, session transcript indexes, and
-precomputed `semantic.sqlite` chunks. MCP
+indexes, optional `codebase-memory-mcp` graph/text search, Codex/Claude session
+provider cards, session transcript indexes, and precomputed `semantic.sqlite`
+chunks. MCP
 exposes resolver/search/read/build/index/feedback tools. Feedback JSONL now
 compiles into `feedback/model.json` and feeds a deterministic rerank prior.
 Arena choices are stored as winner/loser pairwise events, and retrieval eval
@@ -232,6 +233,10 @@ to likely projects, Codex/Claude sessions, and workflow docs. The project code
 index then searches selected README/docs/source/config files and returns
 concrete file paths. It still skips generated dependency folders and
 large/binary files.
+`codebase-memory-index` adds an optional external provider path: it turns
+Doctor's `extracted/*.md` output into a generated Markdown pseudo repo, then
+indexes that repo and any extra `--repo-path` values with unmodified
+`codebase-memory-mcp` when the binary is installed.
 When `read_source` is called on a Codex or Claude session provider card, it
 returns a cleaned transcript preview. Tool calls, tool outputs, environment
 blocks, and AGENTS instructions are intentionally omitted so session history is
@@ -243,6 +248,25 @@ only provider-card summaries.
 `resolve-alternative` is the "this is wrong" path: it records rejected sources
 as negative feedback, refreshes `feedback/model.json`, and generates a new hot
 context pack while filtering those sources from the candidate pool.
+
+Optional codebase-memory provider:
+
+```bash
+agent-context codebase-memory-index \
+  --out /Users/gengrf/agent-context-system \
+  --repo-path /Users/gengrf/agent-context-system
+
+agent-context codebase-memory-search \
+  --out /Users/gengrf/agent-context-system \
+  --query "context resolver recommendation feedback" \
+  --limit 8
+
+agent-context resolve \
+  --out /Users/gengrf/agent-context-system \
+  --goal "告诉我本地所有项目里如何构建个人推荐系统" \
+  --source-scope codebaseMemory \
+  --limit 8
+```
 
 The command writes:
 
@@ -256,8 +280,10 @@ manifests/session_failures.jsonl
 manifests/project_documents.jsonl
 manifests/project_chunks.jsonl
 manifests/symbols.jsonl
+manifests/codebase_memory_sources.jsonl
 indexes/projects.sqlite
 indexes/sessions.sqlite
+providers/codebase_memory/markitdown_extracted_repo/
 packs/<task-id>-resolve-<timestamp>/context.md
 packs/<task-id>-resolve-<timestamp>/sources.jsonl
 packs/<task-id>-resolve-<timestamp>/manifest.json
@@ -308,7 +334,8 @@ uv run agent-context mcp --out /Users/gengrf/agent-context-system
 ```
 
 The MCP server exposes local tools for `resolve_context`, `search_context`,
-`index_context`, `refresh_providers`, `index_projects`, `index_sessions`, `build_hot_pack`, `read_source`,
+`index_context`, `refresh_providers`, `index_projects`,
+`codebase_memory_index`, `codebase_memory_search`, `index_sessions`, `build_hot_pack`, `read_source`,
 `context_panel`, `record_feedback`, `record_panel_feedback`,
 `resolve_alternative_context`,
 `semantic_refresh`, `semantic_maintain`, `semantic_ann_prune`,

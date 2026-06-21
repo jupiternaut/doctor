@@ -19,6 +19,7 @@ from .access_policy import (
 )
 from .acceptance import run_v1_acceptance, run_v1_followup, run_v1_refresh, run_v1_stage_status
 from .alternatives import resolve_alternative_context
+from .codebase_memory import build_codebase_memory_index, search_codebase_memory
 from .codex_plus_smoke import run_codex_plus_smoke
 from .cold_index import build_cold_index, index_path_for, query_cold_index
 from .embedding_benchmark import run_embedding_benchmark
@@ -223,6 +224,43 @@ def mcp_index_projects(
             project_roots=[Path(value) for value in project_roots] if project_roots else None,
             max_projects=max(1, max_projects),
             max_files_per_project=max(1, max_files_per_project),
+        ),
+    }
+
+
+def mcp_codebase_memory_index(
+    out_root: str | None = None,
+    repo_paths: list[str] | None = None,
+    binary: str | None = None,
+    timeout_seconds: int = 120,
+) -> dict[str, Any]:
+    root = resolve_out_root(out_root)
+    return {
+        "mcp_version": MCP_VERSION,
+        **build_codebase_memory_index(
+            root,
+            repo_paths=[Path(value) for value in repo_paths] if repo_paths else None,
+            binary=binary,
+            timeout_seconds=max(1, timeout_seconds),
+        ),
+    }
+
+
+def mcp_codebase_memory_search(
+    query: str,
+    limit: int = 12,
+    out_root: str | None = None,
+    binary: str | None = None,
+    timeout_seconds: int = 120,
+) -> dict[str, Any]:
+    return {
+        "mcp_version": MCP_VERSION,
+        **search_codebase_memory(
+            resolve_out_root(out_root),
+            query,
+            limit=max(1, limit),
+            binary=binary,
+            timeout_seconds=max(1, timeout_seconds),
         ),
     }
 
@@ -1217,6 +1255,36 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
             project_roots=project_roots,
             max_projects=max_projects,
             max_files_per_project=max_files_per_project,
+        )
+
+    @server.tool()
+    def codebase_memory_index(
+        repo_paths: list[str] | None = None,
+        binary: str | None = None,
+        timeout_seconds: int = 120,
+    ) -> dict[str, Any]:
+        """Build Doctor's Markdown pseudo repo and index it with codebase-memory-mcp when available."""
+        return mcp_codebase_memory_index(
+            out_root=str(root),
+            repo_paths=repo_paths,
+            binary=binary,
+            timeout_seconds=timeout_seconds,
+        )
+
+    @server.tool()
+    def codebase_memory_search(
+        query: str,
+        limit: int = 12,
+        binary: str | None = None,
+        timeout_seconds: int = 120,
+    ) -> dict[str, Any]:
+        """Search the optional codebase-memory-mcp provider and return Doctor-shaped sources."""
+        return mcp_codebase_memory_search(
+            query=query,
+            limit=limit,
+            out_root=str(root),
+            binary=binary,
+            timeout_seconds=timeout_seconds,
         )
 
     @server.tool()

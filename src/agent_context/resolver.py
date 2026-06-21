@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .access_policy import filter_records_for_access
+from .codebase_memory import codebase_memory_status, search_codebase_memory
 from .cold_index import search_cold_index
 from .feedback_model import feedback_boost_parts, load_feedback_model, query_family_for_text
 from .io import ensure_dir, write_jsonl, write_text
@@ -31,11 +32,12 @@ GENERIC_SESSION_TERMS = {"codex", "claude", "cursor", "会话", "历史", "之�
 PROJECT_DIVERSITY_CAP = 2
 SOURCE_SCOPE_TO_SOURCE_IDS = {
     "downloads": ("downloads_documents",),
-    "gitProjects": ("git_repositories",),
+    "gitProjects": ("git_repositories", "codebase_memory"),
+    "codebaseMemory": ("codebase_memory",),
     "codexSessions": ("codex_sessions",),
     "agentSessions": ("codex_sessions",),
     "workflowDocs": ("workflow_docs",),
-    "all": ("downloads_documents", "workflow_docs", "git_repositories", "codex_sessions"),
+    "all": ("downloads_documents", "workflow_docs", "git_repositories", "codebase_memory", "codex_sessions"),
 }
 
 
@@ -183,6 +185,7 @@ def build_resolution_plan(
         "semantic_retrieval_modes": [],
         "semantic_ann_fallbacks": [],
         "semantic_ann_cache_statuses": [],
+        "codebase_memory_errors": [],
     }
 
 
@@ -253,6 +256,7 @@ def source_registry(out_root: Path) -> list[dict[str, Any]]:
     db_path = out_root / "indexes" / "context.sqlite"
     project_db_path = project_index_path_for(out_root)
     session_db_path = session_index_path_for(out_root)
+    codebase_memory = codebase_memory_status(out_root)
     workflows = filter_records_for_access(
         out_root,
         load_workflow_records(out_root),
@@ -311,6 +315,17 @@ def source_registry(out_root: Path) -> list[dict[str, Any]]:
             "strengths": ["Codex/Claude history summaries", "session transcript chunks", "cwd hints", "recent user goals"],
             "weaknesses": ["session index is a cleaned transcript preview; it omits tool calls and environment blocks"],
         },
+        {
+            "source_id": "codebase_memory",
+            "kind": "external_code_graph_provider",
+            "status": codebase_memory["status"],
+            "scope": codebase_memory["pseudo_repo_path"],
+            "index_path": codebase_memory["report_json_path"],
+            "records": len(codebase_memory.get("projects") or []),
+            "paths": [project.get("root_path") for project in (codebase_memory.get("projects") or [])[:20]],
+            "strengths": ["external code graph", "search_code over indexed repositories", "Doctor extracted Markdown pseudo repo"],
+            "weaknesses": ["requires optional codebase-memory-mcp binary and an explicit provider index refresh"],
+        },
     ]
 
 def normalize_source_scope(source_scope: str) -> str:
@@ -358,6 +373,7 @@ def select_sources(
 
     if intent in {"project_code", "mixed"}:
         add("workflow_docs", "goal looks like project or architecture work; local workflow docs explain current state")
+        add("codebase_memory", "goal mentions projects/code; external code graph search can surface implementation-level evidence")
         add("git_repositories", "goal mentions projects/code; repository metadata can orient the search")
         add("downloads_documents", "project goals still benefit from the existing cold index for related research and handoff evidence")
     if intent in {"agent_history", "mixed"}:
@@ -371,7 +387,7 @@ def select_sources(
 
     if not selected and "downloads_documents" in available:
         add("downloads_documents", "fallback to the existing indexed local source")
-    return selected[:3], reasons
+    return selected[:4], reasons
 
 
 def refresh_action_for(source_id: str, candidates: list[dict[str, Any]]) -> str:
@@ -381,6 +397,8 @@ def refresh_action_for(source_id: str, candidates: list[dict[str, Any]]) -> str:
         return "reuse_existing_index" if status == "indexed" else "build_index_from_manifests"
     if source_id == "git_repositories":
         return "reuse_project_index" if status == "indexed" else "refresh_provider_manifest"
+    if source_id == "codebase_memory":
+        return "reuse_codebase_memory_provider" if status == "indexed" else "run_codebase-memory-index_or_install_codebase-memory-mcp"
     if source_id == "codex_sessions":
         return "reuse_session_index" if status == "indexed" else "refresh_provider_manifest"
     return "read_current_files"
@@ -426,6 +444,8 @@ def retrieve_candidates_for_plan(out_root: Path, plan: dict[str, Any]) -> list[d
     if "git_repositories" in plan["selected_sources"]:
         candidates.extend(project_index_candidates(out_root, plan))
         candidates.extend(project_candidates(out_root, plan))
+    if "codebase_memory" in plan["selected_sources"]:
+        candidates.extend(codebase_memory_candidates(out_root, plan))
     if "codex_sessions" in plan["selected_sources"]:
         candidates.extend(session_index_candidates(out_root, plan))
         candidates.extend(session_candidates(out_root, plan))
@@ -679,6 +699,31 @@ def project_index_candidates(out_root: Path, plan: dict[str, Any]) -> list[dict[
     return candidates
 
 
+def codebase_memory_candidates(out_root: Path, plan: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates = []
+    for query in plan["queries"]:
+        try:
+            result = search_codebase_memory(
+                out_root,
+                query,
+                limit=max(20, plan["constraints"]["max_context_sources"] * 4),
+            )
+        except Exception as exc:  # noqa: BLE001 - optional external provider must not break resolver.
+            plan.setdefault("codebase_memory_errors", []).append(f"{query}: {type(exc).__name__}: {exc}")
+            continue
+        if result.get("status") not in {"ok", "no_matches"}:
+            plan.setdefault("codebase_memory_errors", []).append(f"{query}: {result.get('status')}")
+        for source in result.get("sources") or []:
+            candidate = dict(source)
+            candidate["type"] = "codebase_memory"
+            candidate["source_group"] = "codebase_memory"
+            candidate["matched_queries"] = [query]
+            candidate["retrieval_query"] = query
+            candidate["retrieval_channel"] = "codebase_memory_search_code"
+            candidates.append(candidate)
+    return candidates
+
+
 def session_index_candidates(out_root: Path, plan: dict[str, Any]) -> list[dict[str, Any]]:
     if not session_index_path_for(out_root).exists():
         return []
@@ -859,7 +904,7 @@ def source_prior(candidate: dict[str, Any]) -> float:
     group = candidate.get("source_group")
     if group == "workflow_docs":
         return 0.8
-    if group in {"downloads_documents", "git_repositories", "codex_sessions"}:
+    if group in {"downloads_documents", "git_repositories", "codebase_memory", "codex_sessions"}:
         return 0.6
     return 0.0
 
