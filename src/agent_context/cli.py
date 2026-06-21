@@ -14,6 +14,7 @@ from .cold_index import build_cold_index, query_cold_index
 from .codex_plus_smoke import run_codex_plus_smoke
 from .compare import compare_routes
 from .embedding_benchmark import run_embedding_benchmark
+from .evidence_index import build_evidence_index, search_evidence_index
 from .feedback_model import write_feedback_model
 from .feedback_replay import run_feedback_replay
 from .feedback_replay_cases import run_feedback_replay_case_maintenance
@@ -86,6 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("--query", required=True, help="Natural-language or keyword query.")
     query.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     query.add_argument("--limit", type=int, default=12, help="Maximum sources to return.")
+
+    evidence_index = subparsers.add_parser("evidence-index", help="Build indexes/evidence.sqlite from provider manifests and generated packs.")
+    evidence_index.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    evidence_search = subparsers.add_parser("evidence-search", help="Search the unified evidence index.")
+    evidence_search.add_argument("--query", required=True, help="Natural-language or keyword query.")
+    evidence_search.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    evidence_search.add_argument("--limit", type=int, default=12, help="Maximum evidence records to return.")
 
     resolve = subparsers.add_parser("resolve", help="Resolve a task goal into a hot context pack.")
     resolve.add_argument("--goal", required=True, help="Task goal to resolve into relevant local context.")
@@ -568,6 +577,10 @@ def main(argv: list[str] | None = None) -> int:
         result = build_cold_index(out_root)
     elif args.command == "query":
         result = query_cold_index(out_root, args.query, limit=args.limit)
+    elif args.command == "evidence-index":
+        result = build_evidence_index(out_root)
+    elif args.command == "evidence-search":
+        result = search_evidence_index(out_root, args.query, limit=max(1, args.limit))
     elif args.command == "resolve":
         result = resolve_context(out_root, args.goal, limit=args.limit, source_scope=args.source_scope)
     elif args.command == "resolve-alternative":

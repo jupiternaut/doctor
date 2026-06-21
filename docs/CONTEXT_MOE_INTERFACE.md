@@ -41,6 +41,7 @@ goal
   -> ripgrep over manifests / extracted Markdown / indexed chunks / provider cards
   -> provider_scores
   -> resolver selected_sources
+  -> small final rerank boost for matching provider/path
 ```
 
 This makes exact local signals cheap and explainable:
@@ -51,8 +52,10 @@ This makes exact local signals cheap and explainable:
 - Douyin video metadata after it has been converted into Markdown KV
 
 The route probe does not replace embeddings, code graphs, OCR, ASR, or
-feedback. It decides which experts should wake up first. The selected experts
-then return `EvidenceRecord` candidates for fusion and hot-pack generation.
+feedback. It decides which experts should wake up first, then contributes a
+small explainable `resolver_score_parts.grep_route` boost during final fusion.
+The selected experts then return `EvidenceRecord` candidates for hot-pack
+generation.
 
 ## EvidenceRecord
 
@@ -141,9 +144,23 @@ must be able to project results into `EvidenceRecord`.
 `src/agent_context/evidence.py` maps legacy source dictionaries into canonical
 evidence records.
 
+`src/agent_context/evidence_index.py` builds `indexes/evidence.sqlite` from
+provider manifests, resolver packs, and query packs. The index stores
+`evidence_nodes` and `evidence_edges` while keeping the full canonical record in
+`payload_json`.
+
 `src/agent_context/grep_route.py` runs the L0/L1 route probe. Resolver plans now
 include `grep_route_probe.provider_scores`, and `context.md` reports the top
-provider scores when deterministic local matches are found.
+provider scores when deterministic local matches are found. Final sources also
+include `resolver_score_parts.grep_route`, `grep_route_provider_score`, and
+`grep_route_hits`.
+
+CLI entrypoints:
+
+```bash
+agent-context evidence-index --out /Users/gengrf/agent-context-system
+agent-context evidence-search --out /Users/gengrf/agent-context-system --query "feedback rerank"
+```
 
 The following outputs now include an `evidence` field per source:
 
@@ -157,8 +174,8 @@ tests. The canonical record is an additive compatibility layer.
 ## Next Steps
 
 - Add provider-native `entities` and `edges` instead of leaving them empty.
-- Add `indexes/evidence.sqlite` so all evidence can be queried independently of
-  individual providers.
+- Use `indexes/evidence.sqlite` as a resolver retrieval provider instead of only
+  a standalone query surface.
 - Add route-level feedback edges: selected, rejected, corrected, stale.
 - Add MediaProvider records for OCR, ASR, keyframes, and profile signals.
 - Add a router eval set that checks whether code, document, session, and video

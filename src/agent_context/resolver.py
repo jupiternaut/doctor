@@ -63,6 +63,7 @@ def resolve_context(
         feedback_model=feedback_model,
         route_selector_model=route_selector_model,
         query_family=plan.get("query_family"),
+        grep_route_probe=plan.get("grep_route_probe"),
     )
     sources = attach_evidence_records(sources, goal=goal)
     plan["retrieval_stats"] = retrieval_stats(candidates, sources)
@@ -839,6 +840,7 @@ def fuse_candidates(
     feedback_model: dict[str, Any] | None = None,
     route_selector_model: dict[str, Any] | None = None,
     query_family: str | None = None,
+    grep_route_probe: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     feedback_model = feedback_model or {}
     route_selector_model = route_selector_model or {}
@@ -869,8 +871,21 @@ def fuse_candidates(
         feedback = feedback_parts["total"]
         route_selector_parts = route_selector_boost_parts(route_selector_model, candidate, query_family=query_family)
         route_selector_prior = route_selector_parts["total"]
+        grep_parts = grep_route_boost_parts(grep_route_probe, candidate)
+        grep_prior = grep_parts["total"]
         resolver_score = round(
-            max(0.0, min(1.0, retrieval * 0.72 + query_coverage * 0.18 + source_weight * 0.10 + feedback + route_selector_prior)),
+            max(
+                0.0,
+                min(
+                    1.0,
+                    retrieval * 0.68
+                    + query_coverage * 0.18
+                    + source_weight * 0.10
+                    + grep_prior
+                    + feedback
+                    + route_selector_prior,
+                ),
+            ),
             6,
         )
         candidate["resolver_score_parts"] = {
@@ -890,6 +905,11 @@ def fuse_candidates(
             "route_selector_global": route_selector_parts["global"],
             "route_selector_source": route_selector_parts["source"],
             "route_selector_query_family": route_selector_parts["query_family"],
+            "grep_route": grep_prior,
+            "grep_route_provider": grep_parts["provider"],
+            "grep_route_path": grep_parts["path"],
+            "grep_route_provider_score": grep_parts["provider_score"],
+            "grep_route_hits": grep_parts["hits"],
         }
         candidate["score"] = resolver_score
         candidate["why_selected"] = why_selected(candidate)
@@ -943,6 +963,54 @@ def source_prior(candidate: dict[str, Any]) -> float:
     return 0.0
 
 
+def grep_route_boost_parts(grep_route_probe: dict[str, Any] | None, candidate: dict[str, Any]) -> dict[str, Any]:
+    stats = grep_provider_scores(grep_route_probe).get(str(candidate.get("source_group") or ""))
+    if not stats:
+        return {
+            "provider": 0.0,
+            "path": 0.0,
+            "provider_score": 0.0,
+            "hits": 0,
+            "total": 0.0,
+        }
+    provider_score = safe_float(stats.get("score"))
+    provider_boost = min(0.05, provider_score * 0.04)
+    path_boost = 0.02 if candidate_matches_grep_top_hit(candidate, stats.get("top_hits") or []) else 0.0
+    total = round(min(0.08, provider_boost + path_boost), 6)
+    return {
+        "provider": round(provider_boost, 6),
+        "path": round(path_boost, 6),
+        "provider_score": round(provider_score, 6),
+        "hits": int(stats.get("hits") or 0),
+        "total": total,
+    }
+
+
+def candidate_matches_grep_top_hit(candidate: dict[str, Any], top_hits: list[dict[str, Any]]) -> bool:
+    candidate_paths = {
+        str(candidate.get("path") or ""),
+        str(candidate.get("relative_path") or ""),
+        str(candidate.get("project_path") or ""),
+    }
+    candidate_paths = {path for path in candidate_paths if path}
+    if not candidate_paths:
+        return False
+    for hit in top_hits:
+        hit_path = str(hit.get("path") or "")
+        if not hit_path:
+            continue
+        if any(candidate_path == hit_path or candidate_path in hit_path or hit_path in candidate_path for candidate_path in candidate_paths):
+            return True
+    return False
+
+
+def safe_float(value: Any) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def why_selected(candidate: dict[str, Any]) -> str:
     queries = ", ".join(candidate.get("matched_queries", [])[:2])
     group = candidate.get("source_group", "unknown")
@@ -952,6 +1020,7 @@ def why_selected(candidate: dict[str, Any]) -> str:
         f"; retrieval={parts.get('retrieval', 0)}; query_coverage={parts.get('query_coverage', 0)}"
         f"; feedback={parts.get('feedback', 0)}"
         f"; route_selector={parts.get('route_selector', 0)}"
+        f"; grep_route={parts.get('grep_route', 0)}"
         f"; queries={queries}"
     )
 

@@ -140,12 +140,18 @@ def evaluate_replay_case(
         source_scope=case["source_scope"],
     )
     candidates = retrieve_candidates_for_plan(out_root, plan)
-    baseline_sources = fuse_candidates(candidates, case["limit"], feedback_model={})
+    baseline_sources = fuse_candidates(
+        candidates,
+        case["limit"],
+        feedback_model={},
+        grep_route_probe=plan.get("grep_route_probe"),
+    )
     feedback_sources = fuse_candidates(
         candidates,
         case["limit"],
         feedback_model=feedback_model,
         query_family=plan.get("query_family"),
+        grep_route_probe=plan.get("grep_route_probe"),
     )
     baseline_top = source_summary(baseline_sources[0]) if baseline_sources else None
     feedback_top = source_summary(feedback_sources[0]) if feedback_sources else None
