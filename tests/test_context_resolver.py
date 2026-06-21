@@ -316,6 +316,15 @@ def test_resolve_cli_creates_resolution_pack(tmp_path: Path, capsys: pytest.Capt
     assert "# Task" in context
     assert "# Top Sources" in context
     assert all({"source_id", "path", "score", "score_parts", "why_selected"} <= set(source) for source in sources)
+    assert all(source.get("evidence", {}).get("schema_version") == "0.1" for source in sources)
+    assert {source["evidence"]["source_type"] for source in sources} <= {
+        "code",
+        "document",
+        "session",
+        "workflow",
+        "project",
+        "unknown",
+    }
 
 
 def test_resolve_task_ids_are_unique_for_fast_repeated_calls(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

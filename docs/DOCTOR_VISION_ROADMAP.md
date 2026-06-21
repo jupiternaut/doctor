@@ -39,6 +39,7 @@ Doctor runtime layer
 
 Context virtualization layer
   provider registry
+  EvidenceRecord interface
   cold index
   semantic background index
   hot context pack

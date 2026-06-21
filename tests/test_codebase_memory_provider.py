@@ -64,6 +64,7 @@ def test_resolver_can_use_codebase_memory_provider(tmp_path: Path, monkeypatch) 
     source.write_text("recommendation feedback loop", encoding="utf-8")
     fake = fake_codebase_memory_binary(tmp_path, repo)
     monkeypatch.setenv("AGENT_CONTEXT_CODEBASE_MEMORY_BIN", str(fake))
+    build_codebase_memory_index(out, repo_paths=[repo], binary=str(fake))
 
     result = resolve_context(
         out,
@@ -75,6 +76,7 @@ def test_resolver_can_use_codebase_memory_provider(tmp_path: Path, monkeypatch) 
 
     assert result["selected_sources"] == ["codebase_memory"]
     assert any(source.get("source_group") == "codebase_memory" for source in sources)
+    assert any(source.get("evidence", {}).get("source_type") == "code" for source in sources)
 
 
 def test_codebase_memory_cli_command_writes_pseudo_repo(tmp_path: Path, capsys) -> None:

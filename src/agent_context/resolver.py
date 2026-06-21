@@ -9,6 +9,7 @@ from typing import Any
 from .access_policy import filter_records_for_access
 from .codebase_memory import codebase_memory_status, search_codebase_memory
 from .cold_index import search_cold_index
+from .evidence import attach_evidence_records
 from .feedback_model import feedback_boost_parts, load_feedback_model, query_family_for_text
 from .io import ensure_dir, write_jsonl, write_text
 from .pack import slugify, snippet
@@ -62,6 +63,7 @@ def resolve_context(
         route_selector_model=route_selector_model,
         query_family=plan.get("query_family"),
     )
+    sources = attach_evidence_records(sources, goal=goal)
     plan["retrieval_stats"] = retrieval_stats(candidates, sources)
     plan["feedback_model"] = feedback_model
     plan["route_selector_model"] = route_selector_model
@@ -345,7 +347,7 @@ def apply_source_scope(
     available = {
         candidate["source_id"]
         for candidate in source_candidates
-        if candidate["status"] != "missing" and candidate["source_id"] in allowed
+        if source_is_available(candidate) and candidate["source_id"] in allowed
     }
     filtered = [source_id for source_id in selected_sources if source_id in available]
     if not filtered:
@@ -362,7 +364,7 @@ def select_sources(
     goal: str,
     candidates: list[dict[str, Any]],
 ) -> tuple[list[str], dict[str, str]]:
-    available = {candidate["source_id"]: candidate for candidate in candidates if candidate["status"] != "missing"}
+    available = {candidate["source_id"]: candidate for candidate in candidates if source_is_available(candidate)}
     selected: list[str] = []
     reasons: dict[str, str] = {}
 
@@ -388,6 +390,14 @@ def select_sources(
     if not selected and "downloads_documents" in available:
         add("downloads_documents", "fallback to the existing indexed local source")
     return selected[:4], reasons
+
+
+def source_is_available(candidate: dict[str, Any]) -> bool:
+    source_id = candidate.get("source_id")
+    status = candidate.get("status")
+    if source_id == "codebase_memory":
+        return status == "indexed"
+    return status != "missing"
 
 
 def refresh_action_for(source_id: str, candidates: list[dict[str, Any]]) -> str:

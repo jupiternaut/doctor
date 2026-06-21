@@ -9,6 +9,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from .evidence import attach_evidence_records
 from .ingest import IngestPaths
 from .io import ensure_dir, read_jsonl, write_jsonl, write_text
 from .pack import slugify, snippet
@@ -397,7 +398,7 @@ def search_cold_index(
     try:
         meta = read_meta(conn)
         candidates = retrieve_candidates(conn, query, max(1, limit), meta, retrieval_config=retrieval_config)
-        sources = render_sources(candidates[:limit])
+        sources = attach_evidence_records(render_sources(candidates[:limit]), goal=query)
     finally:
         conn.close()
 

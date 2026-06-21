@@ -24,6 +24,7 @@ raw files
 - [Doctor Vision Roadmap](docs/DOCTOR_VISION_ROADMAP.md)
 - [Doctor Research Scorecard](docs/DOCTOR_RESEARCH_SCORECARD.md)
 - [Doctor Douyin v0.1](docs/DOCTOR_DOUYIN_V0_1.md)
+- [Context MoE Interface](docs/CONTEXT_MOE_INTERFACE.md)
 - [Doctor Runtime OpenSpec](openspec/changes/doctor-runtime-macos-context/proposal.md)
 - [Architecture Context](docs/ARCHITECTURE_CONTEXT.md)
 - [Architecture v0.3 Vector Diagram](docs/ARCHITECTURE_V0_3_VECTOR.svg)

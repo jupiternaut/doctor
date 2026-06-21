@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from .evidence import attach_evidence_records
 from .io import ensure_dir, read_jsonl, write_jsonl, write_text
 
 MAX_SOURCES = 20
@@ -60,6 +61,7 @@ def build_context_pack(scope: Path, out_root: Path, goal: str) -> dict:
                 "snippet": metadata_snippet(doc),
             }
         )
+    sources = attach_evidence_records(sources, goal=goal)
 
     manifest = {
         "context_pack_version": "0.1",
