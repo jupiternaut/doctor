@@ -8,6 +8,7 @@ __pycache__/
 extracted/
 feedback/
 indexes/
+lab/
 manifests/
 packs/
 providers/codebase_memory/

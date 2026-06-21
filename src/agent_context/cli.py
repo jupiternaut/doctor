@@ -21,6 +21,7 @@ from .feedback_replay_cases import run_feedback_replay_case_maintenance
 from .feedback_replay_trend import run_feedback_replay_trend
 from .ingest import ingest_scope, write_report, IngestPaths
 from .io import read_jsonl
+from .lab import run_lab
 from .launchd import (
     run_semantic_launchd,
     run_semantic_launchd_audit,
@@ -101,6 +102,19 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     resolve.add_argument("--limit", type=int, default=12, help="Maximum sources to include.")
     resolve.add_argument(
+        "--source-scope",
+        choices=SOURCE_SCOPE_CHOICES,
+        default="all",
+        help="Restrict resolver source families. Defaults to all.",
+    )
+
+    lab = subparsers.add_parser("lab", help="Open a dedicated Doctor test console for text/image prompts and feedback.")
+    lab.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    lab.add_argument("--text", default=None, help="Run one lab prompt without entering interactive mode.")
+    lab.add_argument("--image", action="append", default=None, help="Attach an image path to the lab prompt. Can be passed more than once.")
+    lab.add_argument("--once", action="store_true", help="Run once and exit, even when only attachments are provided.")
+    lab.add_argument("--limit", type=int, default=8, help="Maximum sources to include.")
+    lab.add_argument(
         "--source-scope",
         choices=SOURCE_SCOPE_CHOICES,
         default="all",
@@ -583,6 +597,15 @@ def main(argv: list[str] | None = None) -> int:
         result = search_evidence_index(out_root, args.query, limit=max(1, args.limit))
     elif args.command == "resolve":
         result = resolve_context(out_root, args.goal, limit=args.limit, source_scope=args.source_scope)
+    elif args.command == "lab":
+        result = run_lab(
+            out_root,
+            text=args.text,
+            image_paths=args.image or [],
+            source_scope=args.source_scope,
+            limit=args.limit,
+            once=args.once,
+        )
     elif args.command == "resolve-alternative":
         result = resolve_alternative_context(
             out_root,

@@ -24,6 +24,7 @@ raw files
 - [Doctor Vision Roadmap](docs/DOCTOR_VISION_ROADMAP.md)
 - [Doctor Research Scorecard](docs/DOCTOR_RESEARCH_SCORECARD.md)
 - [Doctor Douyin v0.1](docs/DOCTOR_DOUYIN_V0_1.md)
+- [Doctor Lab](docs/DOCTOR_LAB.md)
 - [Context MoE Interface](docs/CONTEXT_MOE_INTERFACE.md)
 - [Doctor Runtime OpenSpec](openspec/changes/doctor-runtime-macos-context/proposal.md)
 - [Architecture Context](docs/ARCHITECTURE_CONTEXT.md)
@@ -95,6 +96,23 @@ The provider writes one Markdown KV file per Douyin URL under
 `extracted/douyin/`, plus `manifests/douyin_videos.jsonl`,
 `indexes/douyin.sqlite`, `profiles/douyin_user_profile.md`, and
 `reports/douyin_ingestion_report.md`.
+
+## Doctor Lab
+
+```bash
+uv run ./agent-context lab \
+  --out /Users/gengrf/agent-context-system
+```
+
+To open a dedicated macOS Terminal window:
+
+```bash
+open /Users/gengrf/agent-context-system/scripts/doctor-lab.command
+```
+
+The Lab accepts task text plus `/image <path>` attachments, generates a resolver
+context pack, shows top sources, and records `/good <n>` or `/bad <n>` feedback
+into the existing feedback model.
 
 ## Fixture Validation
 
