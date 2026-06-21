@@ -10,6 +10,7 @@ canonical evidence shape before it enters the resolver and hot pack.
 ```text
 raw source
   -> provider-specific extraction/index
+  -> GrepRouteProbe L0/L1 gate
   -> EvidenceRecord
   -> multi-index retrieval
   -> fusion/rerank
@@ -28,6 +29,30 @@ Different modalities may use different embeddings and indexes:
 
 Doctor's job is to normalize these records, route between them, and package the
 small set that should be activated for the current task.
+
+## GrepRouteProbe
+
+`grep` / `ripgrep` is a first-class routing signal, not just a text-search
+utility. Doctor uses it as a deterministic L0/L1 gate before semantic retrieval:
+
+```text
+goal
+  -> query terms and entity expansions
+  -> ripgrep over manifests / extracted Markdown / indexed chunks / provider cards
+  -> provider_scores
+  -> resolver selected_sources
+```
+
+This makes exact local signals cheap and explainable:
+
+- file names, paths, project names
+- function names, classes, config keys, error logs
+- people, products, titles, tags, Markdown KV fields
+- Douyin video metadata after it has been converted into Markdown KV
+
+The route probe does not replace embeddings, code graphs, OCR, ASR, or
+feedback. It decides which experts should wake up first. The selected experts
+then return `EvidenceRecord` candidates for fusion and hot-pack generation.
 
 ## EvidenceRecord
 
@@ -84,6 +109,7 @@ Doctor instead uses:
 ```text
 unified EvidenceRecord
   + specialized embeddings/indexes
+  + grep route probe
   + late fusion
   + feedback-updated edge weights
 ```
@@ -114,6 +140,10 @@ must be able to project results into `EvidenceRecord`.
 
 `src/agent_context/evidence.py` maps legacy source dictionaries into canonical
 evidence records.
+
+`src/agent_context/grep_route.py` runs the L0/L1 route probe. Resolver plans now
+include `grep_route_probe.provider_scores`, and `context.md` reports the top
+provider scores when deterministic local matches are found.
 
 The following outputs now include an `evidence` field per source:
 

@@ -11,6 +11,7 @@ from .codebase_memory import codebase_memory_status, search_codebase_memory
 from .cold_index import search_cold_index
 from .evidence import attach_evidence_records
 from .feedback_model import feedback_boost_parts, load_feedback_model, query_family_for_text
+from .grep_route import run_grep_route_probe
 from .io import ensure_dir, write_jsonl, write_text
 from .pack import slugify, snippet
 from .project_index import project_index_path_for, search_project_index
@@ -132,7 +133,8 @@ def build_resolution_plan(
     intent = classify_goal(goal, terms)
     entities = entities_for(goal, terms)
     source_candidates = source_registry(out_root)
-    selected_sources, source_reasons = select_sources(intent, goal, source_candidates)
+    grep_route_probe = run_grep_route_probe(out_root, goal, terms=terms, source_scope=source_scope)
+    selected_sources, source_reasons = select_sources(intent, goal, source_candidates, grep_route_probe=grep_route_probe)
     selected_sources, source_reasons = apply_source_scope(
         selected_sources,
         source_reasons,
@@ -149,6 +151,7 @@ def build_resolution_plan(
             "Use deterministic keyword and source-availability rules.",
             "Prefer local indexed sources before metadata-only sources.",
             "Use multiple queries and fuse results instead of writing intermediate query packs.",
+            "Use ripgrep as a deterministic L0/L1 route probe before semantic retrieval.",
             "Apply retrieval-eval route selector priors when labeled backend comparisons exist.",
         ],
         "goal": goal,
@@ -160,6 +163,7 @@ def build_resolution_plan(
         "selected_sources": selected_sources,
         "source_reasons": source_reasons,
         "source_candidates": source_candidates,
+        "grep_route_probe": grep_route_probe,
         "queries": queries,
         "retrieval_config": {
             "embedding_backend": retrieval_config.embedding_backend,
@@ -363,6 +367,7 @@ def select_sources(
     intent: str,
     goal: str,
     candidates: list[dict[str, Any]],
+    grep_route_probe: dict[str, Any] | None = None,
 ) -> tuple[list[str], dict[str, str]]:
     available = {candidate["source_id"]: candidate for candidate in candidates if source_is_available(candidate)}
     selected: list[str] = []
@@ -372,6 +377,18 @@ def select_sources(
         if source_id in available and source_id not in selected:
             selected.append(source_id)
             reasons[source_id] = reason
+
+    for source_id, stats in grep_provider_scores(grep_route_probe).items():
+        if float(stats.get("score") or 0.0) < 0.2:
+            continue
+        add(
+            source_id,
+            (
+                "grep route probe found deterministic local matches"
+                f"; hits={stats.get('hits', 0)}; files={stats.get('unique_files', 0)}"
+                f"; terms={', '.join(stats.get('matched_terms', [])[:5])}"
+            ),
+        )
 
     if intent in {"project_code", "mixed"}:
         add("workflow_docs", "goal looks like project or architecture work; local workflow docs explain current state")
@@ -390,6 +407,13 @@ def select_sources(
     if not selected and "downloads_documents" in available:
         add("downloads_documents", "fallback to the existing indexed local source")
     return selected[:4], reasons
+
+
+def grep_provider_scores(grep_route_probe: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not isinstance(grep_route_probe, dict):
+        return {}
+    scores = grep_route_probe.get("provider_scores")
+    return scores if isinstance(scores, dict) else {}
 
 
 def source_is_available(candidate: dict[str, Any]) -> bool:
@@ -1011,10 +1035,19 @@ def render_context(goal: str, created_at: str, plan: dict[str, Any], sources: li
         f"- Candidate sources considered: {plan.get('retrieval_stats', {}).get('candidates_considered', 0)}",
         f"- Sources included: {len(sources)}",
         "- This is a task-specific hot context pack, not a full-disk index dump.",
-        "",
-        "# Top Sources",
-        "",
     ]
+    grep_probe = plan.get("grep_route_probe") if isinstance(plan.get("grep_route_probe"), dict) else {}
+    grep_scores = grep_probe.get("provider_scores") if isinstance(grep_probe, dict) else {}
+    if isinstance(grep_scores, dict) and grep_scores:
+        routed = ", ".join(
+            f"{source_id}={stats.get('score')}"
+            for source_id, stats in list(grep_scores.items())[:4]
+            if isinstance(stats, dict)
+        )
+        lines.append(f"- Grep route probe: `{grep_probe.get('engine')}` matched provider scores: {routed}.")
+    else:
+        lines.append("- Grep route probe found no strong deterministic provider matches.")
+    lines.extend(["", "# Top Sources", ""])
     if sources:
         for source in sources:
             lines.append(
