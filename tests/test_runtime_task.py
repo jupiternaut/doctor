@@ -32,6 +32,10 @@ def test_runtime_task_starts_clarify_review_without_index_access(tmp_path: Path)
     assert Path(result["agent_preflight"]["agent_preflight_md_path"]).exists()
     assert Path(result["review_launch"]["review_launch_md_path"]).exists()
     assert Path(result["client_html_path"]).exists()
+    runtime_task_md = Path(result["runtime_task_md_path"]).read_text(encoding="utf-8")
+    assert "doctor context-review" in runtime_task_md
+    assert "--session-id runtime-task" in runtime_task_md
+    assert "doctor agent-preflight --advance context" not in runtime_task_md
     assert not (out / "packs").exists()
     assert not (out / "indexes").exists()
 

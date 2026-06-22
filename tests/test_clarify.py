@@ -29,7 +29,9 @@ def test_clarify_writes_reviewable_prompt_without_doctor_access(tmp_path: Path) 
     assert payload["session_id"] == "session-test"
     assert "任务目标：我想比较我的 Codex 项目和一份 AI 应用实习生简历" in markdown
     assert "does not read Doctor indexes" in markdown
-    assert "agent-context agent-preflight --advance context" in markdown
+    assert "doctor context-review" in markdown
+    assert "--session-id session-test" in markdown
+    assert "--action generate" in markdown
     assert not (tmp_path / "out" / "packs").exists()
     assert not (tmp_path / "out" / "indexes").exists()
 

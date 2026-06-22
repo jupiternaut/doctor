@@ -41,6 +41,7 @@ def build_clarification(
         "index_access": False,
         "original_goal": goal,
         "normalized_goal": normalized_goal,
+        "out_root": str(root),
         "intent": profile["intent"],
         "source_scope_hint": profile["source_scope_hint"],
         "expected_output": profile["expected_output"],
@@ -177,7 +178,15 @@ def render_refined_prompt(clarification: dict[str, Any]) -> str:
             "",
             "## Next Stage",
             "",
-            "If this prompt is accepted, advance the session with `agent-context agent-preflight --advance context` to generate `model_input.md` for review.",
+            "If this prompt is accepted, generate the reviewable model input with:",
+            "",
+            "```bash",
+            (
+                f"doctor context-review --out {clarification['out_root']} "
+                f"--session-id {clarification['session_id']} --action generate "
+                f"--source-scope {clarification['source_scope_hint']} --limit 8"
+            ),
+            "```",
             "",
         ]
     )

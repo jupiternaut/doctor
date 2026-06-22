@@ -128,6 +128,7 @@ def persist_runtime_task(result: dict[str, Any]) -> None:
 def render_runtime_task_markdown(result: dict[str, Any]) -> str:
     preflight = result.get("agent_preflight") or {}
     launch = result.get("review_launch") or {}
+    next_command = next(iter(result.get("next_commands") or []), "")
     lines = [
         "---",
         f"runtime_task_version: {result['runtime_task_version']}",
@@ -172,7 +173,11 @@ def render_runtime_task_markdown(result: dict[str, Any]) -> str:
         "",
         "## Next Step",
         "",
-        "After the user accepts `refined_prompt.md`, advance with `doctor agent-preflight --advance context` to let Doctor generate a reviewable `model_input.md`.",
+        "After the user accepts `refined_prompt.md`, generate a reviewable `model_input.md` with:",
+        "",
+        "```bash",
+        str(next_command),
+        "```",
         "",
     ]
     return "\n".join(lines)
