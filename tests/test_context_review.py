@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from agent_context.cli import main
-from agent_context.context_review import run_context_review
+from agent_context.context_review import extract_retrieval_goal, run_context_review
 from agent_context.io import read_jsonl
 
 
@@ -55,13 +55,34 @@ def fake_preflight(out_root: Path, goal: str, source_scope: str, limit: int, mod
     }
 
 
+def test_extract_retrieval_goal_removes_review_process_clauses() -> None:
+    refined_prompt = "\n".join(
+        [
+            "任务目标：我codex的项目和这个人的简历比起来有什么区别；输入包含一张简历截图，需要先归一化问题，不访问冷索引，等待用户审查后再生成上下文",
+            "",
+            "请在下一阶段使用 Doctor 检索本机上下文前，严格保留这个目标。",
+            "任务类型：comparison",
+        ]
+    )
+
+    assert extract_retrieval_goal(refined_prompt) == "我codex的项目和这个人的简历比起来有什么区别"
+
+
 def test_context_review_generates_model_input_from_refined_prompt(tmp_path: Path, monkeypatch) -> None:
     out = tmp_path / "out"
     refined_prompt = write_refined_prompt(out)
     calls = {}
 
     def capture_preflight(out_root: Path, goal: str, source_scope: str, limit: int, mode: str, **kwargs) -> dict:
-        calls.update({"goal": goal, "source_scope": source_scope, "limit": limit, "mode": mode})
+        calls.update(
+            {
+                "goal": goal,
+                "retrieval_goal": kwargs.get("retrieval_goal"),
+                "source_scope": source_scope,
+                "limit": limit,
+                "mode": mode,
+            }
+        )
         return fake_preflight(out_root, goal, source_scope, limit, mode, **kwargs)
 
     monkeypatch.setattr("agent_context.context_review.build_codex_preflight", capture_preflight)
@@ -78,6 +99,8 @@ def test_context_review_generates_model_input_from_refined_prompt(tmp_path: Path
     assert result["status"] == "pending_review"
     assert result["session_id"] == "session-review"
     assert calls["goal"] == "任务目标：审查 Doctor 准备喂给模型的上下文\n\n请保留原目标。"
+    assert calls["retrieval_goal"] == "审查 Doctor 准备喂给模型的上下文"
+    assert result["retrieval_goal"] == "审查 Doctor 准备喂给模型的上下文"
     assert calls["source_scope"] == "all"
     assert calls["limit"] == 7
     assert calls["mode"] == "deep"

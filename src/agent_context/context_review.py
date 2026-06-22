@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -55,9 +56,17 @@ def generate_context_review(
 ) -> dict[str, Any]:
     prompt_path = resolve_refined_prompt_path(root, refined_prompt_path=refined_prompt_path, session_id=session_id)
     refined_prompt = extract_refined_prompt(prompt_path)
+    retrieval_goal = extract_retrieval_goal(refined_prompt)
     session = session_id or session_id_from_refined_prompt_path(root, prompt_path) or f"session-{slugify(refined_prompt)}"
     session_dir = ensure_dir(root / "runtime" / "sessions" / session)
-    preflight = build_codex_preflight(root, refined_prompt, source_scope=source_scope, limit=limit, mode=mode)
+    preflight = build_codex_preflight(
+        root,
+        refined_prompt,
+        source_scope=source_scope,
+        limit=limit,
+        mode=mode,
+        retrieval_goal=retrieval_goal,
+    )
     review = {
         "context_review_version": CONTEXT_REVIEW_VERSION,
         "stage": "resolve_review",
@@ -68,6 +77,7 @@ def generate_context_review(
         "reason": reason,
         "refined_prompt_md_path": str(prompt_path),
         "refined_prompt": refined_prompt,
+        "retrieval_goal": retrieval_goal,
         "source_scope": source_scope,
         "limit": limit,
         "mode": mode,
@@ -131,6 +141,43 @@ def extract_refined_prompt(path: Path) -> str:
     if next_heading >= 0:
         section = section[:next_heading]
     return section.strip()
+
+
+def extract_retrieval_goal(refined_prompt: str) -> str:
+    for line in refined_prompt.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("任务目标："):
+            return strip_retrieval_meta_clauses(stripped.split("：", 1)[1].strip()) or stripped
+        if stripped.lower().startswith("task goal:"):
+            return strip_retrieval_meta_clauses(stripped.split(":", 1)[1].strip()) or stripped
+    return strip_retrieval_meta_clauses(refined_prompt.strip()) or refined_prompt.strip()
+
+
+def strip_retrieval_meta_clauses(goal: str) -> str:
+    parts = re.split(r"[;；。]\s*", goal)
+    kept: list[str] = []
+    meta_markers = (
+        "输入包含",
+        "需要先",
+        "不访问",
+        "等待用户",
+        "等待审查",
+        "归一化",
+        "冷索引",
+        "生成上下文",
+        "review",
+        "index",
+        "context",
+    )
+    for part in parts:
+        stripped = part.strip()
+        if not stripped:
+            continue
+        lower = stripped.lower()
+        if any(marker.lower() in lower for marker in meta_markers):
+            continue
+        kept.append(stripped)
+    return "；".join(kept).strip()
 
 
 def summarize_preflight(preflight: dict[str, Any]) -> dict[str, Any]:

@@ -27,16 +27,19 @@ def build_codex_preflight(
     *,
     auto_context: bool = True,
     mode: str = "fast",
+    retrieval_goal: str | None = None,
 ) -> dict[str, Any]:
     root = Path(out_root).expanduser().resolve()
     normalized_limit = max(1, int(limit))
     normalized_mode = mode if mode in CODEX_PREFLIGHT_MODES else "fast"
+    normalized_retrieval_goal = (retrieval_goal or goal).strip() or goal
     metadata: dict[str, Any] = {
         "codex_preflight_version": CODEX_PREFLIGHT_VERSION,
         "auto_context": bool(auto_context),
         "mode": normalized_mode,
         "requested_mode": mode,
         "goal": goal,
+        "retrieval_goal": normalized_retrieval_goal,
         "source_scope": source_scope,
         "limit": normalized_limit,
         "out_root": str(root),
@@ -54,7 +57,7 @@ def build_codex_preflight(
     try:
         resolved = resolve_context(
             root,
-            goal,
+            normalized_retrieval_goal,
             limit=normalized_limit,
             source_scope=source_scope,
         )
@@ -117,6 +120,8 @@ def render_codex_preflight(preflight: dict[str, Any]) -> str:
         if preflight.get(key) is not None:
             lines.append(f"{key}: {preflight[key]}")
     lines.extend(["---", "", "# Codex Preflight", "", "## Goal", "", preflight["goal"], ""])
+    if preflight.get("retrieval_goal") and preflight["retrieval_goal"] != preflight["goal"]:
+        lines.extend(["## Retrieval Goal", "", preflight["retrieval_goal"], ""])
 
     status = preflight["status"]
     if status == "ok":

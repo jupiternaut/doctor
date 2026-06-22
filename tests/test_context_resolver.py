@@ -396,6 +396,49 @@ def test_resolver_fuses_multiple_queries_without_query_pack_spam(
     assert after_rag_dirs == before_rag_dirs
 
 
+def test_resolution_plan_does_not_inject_recommendation_query_for_unrelated_project_goal(
+    tmp_path: Path,
+) -> None:
+    plan = build_resolution_plan(
+        out_root=tmp_path / "out",
+        goal="我codex的项目和这个人的简历比起来有什么区别",
+        limit=5,
+    )
+
+    joined_queries = "\n".join(plan["queries"]).lower()
+    assert plan["intent"] == "project_code"
+    assert "recommendation system local project architecture" not in joined_queries
+    assert "codex 会话 历史" not in joined_queries
+    assert "doctor codex++ warp" in joined_queries
+
+
+def test_resolution_plan_keeps_codex_session_route_when_history_is_explicit(
+    tmp_path: Path,
+) -> None:
+    plan = build_resolution_plan(
+        out_root=tmp_path / "out",
+        goal="查看 Codex 会话历史里关于 Doctor 的讨论",
+        limit=5,
+    )
+
+    joined_queries = "\n".join(plan["queries"]).lower()
+    assert plan["intent"] in {"agent_history", "mixed"}
+    assert "codex 会话 历史" in joined_queries
+
+
+def test_resolution_plan_keeps_recommendation_query_for_recommendation_goal(
+    tmp_path: Path,
+) -> None:
+    plan = build_resolution_plan(
+        out_root=tmp_path / "out",
+        goal="告诉我本地所有项目里如何构建个人推荐系统",
+        limit=5,
+    )
+
+    joined_queries = "\n".join(plan["queries"]).lower()
+    assert "recommendation system local project architecture" in joined_queries
+
+
 def test_mcp_resolve_context_returns_top_sources(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _scope, out = build_indexed_fixture(tmp_path)
     capsys.readouterr()

@@ -216,7 +216,7 @@ def classify_goal(goal: str, terms: list[str]) -> str:
         "系统",
     )
     document_markers = ("downloads", "下载", "pdf", "docx", "文档", "资料", "文章", "报告")
-    history_markers = ("会话", "历史", "之前", "聊过", "codex", "claude", "cursor")
+    history_markers = ("会话", "历史", "之前", "聊过", "claude", "cursor")
     workflow_markers = ("workflow", "handoff", "readme", "mcp", "agent", "上下文", "热包", "冷索引")
 
     hits = {
@@ -440,12 +440,16 @@ def refresh_action_for(source_id: str, candidates: list[dict[str, Any]]) -> str:
 
 
 def plan_queries(goal: str, intent: str, entities: list[str], terms: list[str]) -> list[str]:
+    lower_goal = goal.lower()
     queries = [goal]
     if entities:
         queries.append(" ".join(entities[:3]))
     if intent in {"project_code", "mixed"}:
         queries.append(" ".join(["项目", "架构", "构建", "实现", *terms[:3]]))
-        queries.append("recommendation system local project architecture")
+        if "推荐" in goal or "recommend" in lower_goal:
+            queries.append("recommendation system local project architecture")
+        if "codex" in lower_goal and ("项目" in goal or "project" in lower_goal):
+            queries.append("Doctor Codex++ Warp agent-context-system 本机上下文运行时")
     if intent in {"document_research", "mixed"}:
         queries.append(" ".join(["资料", "文档", "研究", *terms[:3]]))
     if intent in {"agent_history", "mixed"}:

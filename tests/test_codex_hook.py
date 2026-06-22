@@ -71,6 +71,51 @@ def test_codex_preflight_calls_resolver_and_returns_markdown_paths(
     assert "hidden platform or client system prompts" in model_input
 
 
+def test_codex_preflight_separates_model_prompt_from_retrieval_goal(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    calls = {}
+
+    def fake_resolve_context(out_root: Path, goal: str, limit: int, source_scope: str) -> dict:
+        calls["goal"] = goal
+        pack = out_root / "packs" / "task-resolve-20260615120000"
+        pack.mkdir(parents=True, exist_ok=True)
+        (pack / "context.md").write_text("# Context Pack\n\nFocused evidence.", encoding="utf-8")
+        return {
+            "resolver_version": "0.4",
+            "route": "rule_based_v0",
+            "task_id": "task-resolve-20260615120000",
+            "goal": goal,
+            "intent": "project_code",
+            "source_scope": source_scope,
+            "selected_sources": ["git_repositories"],
+            "queries": [goal],
+            "context_md_path": str(pack / "context.md"),
+            "sources_jsonl_path": str(pack / "sources.jsonl"),
+            "manifest_json_path": str(pack / "manifest.json"),
+            "resolution_plan_json_path": str(pack / "resolution_plan.json"),
+            "sources_included": 1,
+        }
+
+    monkeypatch.setattr("agent_context.codex_hook.resolve_context", fake_resolve_context)
+
+    result = build_codex_preflight(
+        tmp_path / "out",
+        "完整模型提示：比较我的 Codex 项目和简历，并区分证据和推断。",
+        source_scope="all",
+        limit=3,
+        retrieval_goal="比较我的 Codex 项目和简历",
+    )
+
+    assert calls["goal"] == "比较我的 Codex 项目和简历"
+    assert result["goal"].startswith("完整模型提示")
+    assert result["retrieval_goal"] == "比较我的 Codex 项目和简历"
+    model_input = Path(result["model_input_md_path"]).read_text(encoding="utf-8")
+    assert "完整模型提示：比较我的 Codex 项目和简历" in model_input
+    assert "Focused evidence." in model_input
+
+
 def test_codex_preflight_disabled_skips_resolver(tmp_path: Path, monkeypatch) -> None:
     def fail_if_called(*_args, **_kwargs) -> dict:
         raise AssertionError("resolver should not be called")
