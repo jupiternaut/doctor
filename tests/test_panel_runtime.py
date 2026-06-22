@@ -87,6 +87,8 @@ def test_context_panel_writes_status_html_and_feedback(tmp_path: Path) -> None:
     assert status["semantic_launchd"]["recovery"]["exists"] is False
     assert status["semantic_readiness"]["exists"] is False
     assert status["semantic_readiness"]["status"] == "missing"
+    assert status["runtime_vm"]["exists"] is False
+    assert status["runtime_vm"]["status"] == "missing"
     assert status["feedback"]["replay_trend"]["exists"] is False
     assert status["feedback"]["replay_trend"]["health"] == "warning"
     panel_html = html_path.read_text(encoding="utf-8")
@@ -94,6 +96,7 @@ def test_context_panel_writes_status_html_and_feedback(tmp_path: Path) -> None:
     assert "Access Audit" in panel_html
     assert "Semantic LaunchAgent" in panel_html
     assert "Semantic Readiness" in panel_html
+    assert "Runtime VM Status" in panel_html
     assert "Feedback Replay Health" in panel_html
     assert "project:secret" in panel_html
 
@@ -362,6 +365,63 @@ def test_context_panel_reads_latest_v1_acceptance(tmp_path: Path) -> None:
     assert "multi_day_not_due" in panel_html
     assert "V1 Follow-Up Plan" in panel_html
     assert "time-gated" in panel_html
+
+
+def test_context_panel_reads_latest_runtime_vm_acceptance(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    reports = out / "reports"
+    reports.mkdir(parents=True)
+    latest = reports / "runtime-vm-acceptance-latest.json"
+    latest.write_text(
+        json.dumps(
+            {
+                "status": "awaiting_context_review",
+                "ready": False,
+                "session_id": "doctor-panel-session",
+                "latest_md_path": str(reports / "runtime-vm-acceptance-latest.md"),
+                "session": {
+                    "next": {
+                        "review_file": str(out / "packs" / "task" / "model_input.md"),
+                        "message": "Review model_input.md before any model or agent consumes it.",
+                        "commands": [
+                            "doctor context-review --out /tmp/out --session-id doctor-panel-session --action approve",
+                            "doctor context-review --out /tmp/out --session-id doctor-panel-session --action reject",
+                        ],
+                    }
+                },
+                "checks": [
+                    {
+                        "id": "context_model_input",
+                        "status": "ok",
+                        "required_for_complete": True,
+                    },
+                    {
+                        "id": "context_approved",
+                        "status": "missing",
+                        "required_for_complete": True,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    panel = build_context_panel(out, auto_context=False)
+    status = json.loads(Path(panel["status_json_path"]).read_text(encoding="utf-8"))
+    runtime_vm = status["runtime_vm"]
+    panel_html = Path(panel["html_path"]).read_text(encoding="utf-8")
+
+    assert runtime_vm["exists"] is True
+    assert runtime_vm["status"] == "awaiting_context_review"
+    assert runtime_vm["ready"] is False
+    assert runtime_vm["session_id"] == "doctor-panel-session"
+    assert runtime_vm["review_file"].endswith("model_input.md")
+    assert runtime_vm["missing_required"] == ["context_approved"]
+    assert len(runtime_vm["next_commands"]) == 2
+    assert "Runtime VM Status" in panel_html
+    assert "awaiting_context_review" in panel_html
+    assert "doctor-panel-session" in panel_html
+    assert "Runtime VM Next Commands" in panel_html
 
 
 def test_context_panel_reads_latest_v1_stage_status(tmp_path: Path) -> None:

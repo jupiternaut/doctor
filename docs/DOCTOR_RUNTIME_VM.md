@@ -137,6 +137,31 @@ The report checks:
 If a session is waiting for user review, the report stays incomplete and records
 the exact next command instead of pretending the runtime is accepted.
 
+## Panel Status Contract
+
+`doctor panel --no-auto-context` reads `runtime-vm-acceptance-latest.json` and
+adds a `runtime_vm` object to:
+
+```text
+panel/status.json
+panel/context_panel.html
+```
+
+The object includes:
+
+- `status`
+- `ready`
+- `session_id`
+- `review_file`
+- `next_message`
+- `next_commands`
+- `missing_required`
+- `latest_md_path`
+
+Codex++, Warp, or another shell can render this object without learning the
+internal session layout. A user can see the current review gate and then run the
+listed approve/reject command.
+
 ## Current Boundary
 
 Implemented:
@@ -147,10 +172,11 @@ Implemented:
 - CLI alias through `doctor`
 - MCP tools for all four review gates
 - acceptance handoff reports
+- `panel/status.json` runtime VM status for UI clients
 
 Still outside this shell:
 
 - real automatic model answering
 - default Codex++/Warp interception for every task
 - unified execution runtime beyond explicit reviewed commands
-- full UI for approving each gate
+- native clickable UI for approving each gate

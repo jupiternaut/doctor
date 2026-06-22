@@ -97,6 +97,7 @@ def panel_status(
     semantic_launchd["trend"] = latest_semantic_launchd_trend(out_root)
     semantic_readiness = latest_semantic_readiness(out_root)
     v1_acceptance = latest_v1_acceptance(out_root)
+    runtime_vm = latest_runtime_vm_acceptance(out_root)
     refresh_v1_stage_status_for_panel(out_root)
     v1_stage_status = latest_v1_stage_status(out_root)
     return {
@@ -123,6 +124,7 @@ def panel_status(
         "semantic_launchd": semantic_launchd,
         "semantic_readiness": semantic_readiness,
         "v1_acceptance": v1_acceptance,
+        "runtime_vm": runtime_vm,
         "v1_stage_status": v1_stage_status,
         "feedback": {
             "panel_feedback_jsonl_path": str(out_root / "feedback" / "panel_feedback.jsonl"),
@@ -314,6 +316,15 @@ def render_panel_html(status: dict[str, Any], status_path: Path) -> str:
             "V1 Stage Gates",
             (status.get("v1_stage_status") or {}).get("next_gates", {}),
         ),
+        ("Runtime VM Status", (status.get("runtime_vm") or {}).get("status") or ""),
+        ("Runtime VM Ready", (status.get("runtime_vm") or {}).get("ready", "")),
+        ("Runtime VM Session", (status.get("runtime_vm") or {}).get("session_id") or ""),
+        ("Runtime VM Review File", (status.get("runtime_vm") or {}).get("review_file") or ""),
+        ("Runtime VM Report", (status.get("runtime_vm") or {}).get("latest_md_path") or ""),
+        (
+            "Runtime VM Next Commands",
+            "\n".join((status.get("runtime_vm") or {}).get("next_commands") or []),
+        ),
     ]
     row_html = "\n".join(
         f"<tr><th>{html.escape(label)}</th><td>{html.escape(str(value))}</td></tr>"
@@ -455,6 +466,58 @@ def latest_v1_acceptance(out_root: Path) -> dict[str, Any]:
         "followup_check": followup_check,
         "latest_followup_md_path": data.get("latest_followup_md_path", ""),
         "latest_followup_json_path": data.get("latest_followup_json_path", ""),
+    }
+
+
+def latest_runtime_vm_acceptance(out_root: Path) -> dict[str, Any]:
+    latest_json_path = out_root.expanduser().resolve() / "reports" / "runtime-vm-acceptance-latest.json"
+    if not latest_json_path.exists():
+        return {
+            "exists": False,
+            "path": str(latest_json_path),
+            "status": "missing",
+            "ready": False,
+            "session_id": "",
+            "latest_md_path": "",
+            "review_file": "",
+            "next_commands": [],
+            "checks": [],
+        }
+    try:
+        data = json.loads(latest_json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "exists": True,
+            "path": str(latest_json_path),
+            "status": "failed",
+            "ready": False,
+            "session_id": "",
+            "latest_md_path": "",
+            "review_file": "",
+            "next_commands": [],
+            "checks": [],
+            "error": str(exc),
+        }
+    session = data.get("session") if isinstance(data.get("session"), dict) else {}
+    next_state = session.get("next") if isinstance(session.get("next"), dict) else {}
+    checks = data.get("checks") if isinstance(data.get("checks"), list) else []
+    missing_required = [
+        check.get("id")
+        for check in checks
+        if isinstance(check, dict) and check.get("required_for_complete") and check.get("status") != "ok"
+    ]
+    return {
+        "exists": True,
+        "path": str(latest_json_path),
+        "latest_md_path": data.get("latest_md_path", ""),
+        "status": data.get("status", ""),
+        "ready": data.get("ready") is True,
+        "session_id": data.get("session_id", ""),
+        "review_file": next_state.get("review_file", ""),
+        "next_message": next_state.get("message", ""),
+        "next_commands": next_state.get("commands") if isinstance(next_state.get("commands"), list) else [],
+        "missing_required": missing_required,
+        "checks": checks,
     }
 
 
