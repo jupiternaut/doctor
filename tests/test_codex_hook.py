@@ -19,6 +19,8 @@ def test_codex_preflight_calls_resolver_and_returns_markdown_paths(
         calls["limit"] = limit
         calls["source_scope"] = source_scope
         pack = out_root / "packs" / "task-resolve-20260615120000"
+        pack.mkdir(parents=True, exist_ok=True)
+        (pack / "context.md").write_text("# Context Pack\n\nLocal Doctor evidence.", encoding="utf-8")
         return {
             "resolver_version": "0.4",
             "route": "rule_based_v0",
@@ -57,9 +59,16 @@ def test_codex_preflight_calls_resolver_and_returns_markdown_paths(
     assert result["paths"]["context_md_path"] == result["context_md_path"]
     assert result["paths"]["sources_jsonl_path"] == result["sources_jsonl_path"]
     assert Path(result["preflight_markdown_path"]).exists()
+    assert Path(result["model_input_md_path"]).exists()
+    assert result["paths"]["model_input_md_path"] == result["model_input_md_path"]
     assert "status: ok" in result["preflight_markdown"]
     assert "mode: deep" in result["preflight_markdown"]
     assert f"`{result['context_md_path']}`" in result["preflight_markdown"]
+    assert f"`{result['model_input_md_path']}`" in result["preflight_markdown"]
+    model_input = Path(result["model_input_md_path"]).read_text(encoding="utf-8")
+    assert "prepare local coding task" in model_input
+    assert "Local Doctor evidence." in model_input
+    assert "hidden platform or client system prompts" in model_input
 
 
 def test_codex_preflight_disabled_skips_resolver(tmp_path: Path, monkeypatch) -> None:
@@ -83,6 +92,7 @@ def test_codex_preflight_disabled_skips_resolver(tmp_path: Path, monkeypatch) ->
     assert result["limit"] == 1
     assert result["paths"] == {}
     assert result["context_md_path"] is None
+    assert result["model_input_md_path"] is None
     assert Path(result["preflight_markdown_path"]).exists()
     assert "auto_context: false" in result["preflight_markdown"]
     assert "no resolver pack was generated" in result["preflight_markdown"]
@@ -111,6 +121,7 @@ def test_codex_preflight_returns_fallback_markdown_on_resolver_failure(
     assert result["requested_mode"] == "unknown"
     assert result["fallback"] == "continue_without_context"
     assert result["paths"] == {}
+    assert result["model_input_md_path"] is None
     assert Path(result["preflight_markdown_path"]).exists()
     assert "status: resolver_failed" in result["preflight_markdown"]
     assert "index is missing" in result["preflight_markdown"]

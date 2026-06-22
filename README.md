@@ -308,11 +308,15 @@ packs/<task-id>-resolve-<timestamp>/sources.jsonl
 packs/<task-id>-resolve-<timestamp>/manifest.json
 packs/<task-id>-resolve-<timestamp>/resolution_plan.json
 packs/<task-id>-resolve-<timestamp>/codex_preflight.md
+packs/<task-id>-resolve-<timestamp>/model_input.md
 ```
 
 `codex-preflight` is the decoupled entry point for Codex++ or another wrapper:
 it calls the resolver when `auto_context` is enabled, writes
-`codex_preflight.md`, and returns the context/sources/manifest paths.
+`codex_preflight.md` and a reviewable `model_input.md`, then returns the
+context/sources/manifest/model-input paths. `model_input.md` is the visible
+Doctor context payload proposed for the model; it does not include hidden
+platform or client system prompts.
 
 `panel` writes a UI-friendly status contract and a local HTML panel:
 
