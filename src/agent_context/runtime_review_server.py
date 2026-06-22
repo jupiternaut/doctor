@@ -146,6 +146,81 @@ def render_runtime_review_html(out_root: str | Path, session_id: str, *, notice:
 </html>"""
 
 
+def runtime_review_api_payload(out_root: str | Path, session_id: str) -> dict[str, Any]:
+    root = Path(out_root).expanduser().resolve()
+    session = inspect_runtime_session(root, session_id)
+    acceptance = safe_acceptance(root, session_id)
+    return {
+        "runtime_review_server_version": RUNTIME_REVIEW_SERVER_VERSION,
+        "status": "ok",
+        "session_id": session_id,
+        "out_root": str(root),
+        "runtime_session": session,
+        "runtime_acceptance": acceptance,
+        "review_preview": review_file_preview(root, session),
+        "allowed_actions": allowed_actions_for_status(str(session["status"])),
+        "endpoints": {
+            "html": "/",
+            "session": "/api/session",
+            "action": "/api/action",
+        },
+    }
+
+
+def allowed_actions_for_status(status: str) -> list[dict[str, Any]]:
+    actions: dict[str, list[dict[str, Any]]] = {
+        "awaiting_context_generation": [
+            {"action": "generate_context", "label": "Generate Context", "requires_reason": True},
+        ],
+        "context_rejected": [
+            {"action": "generate_context", "label": "Regenerate Context", "requires_reason": True},
+        ],
+        "awaiting_context_review": [
+            {"action": "approve_context", "label": "Approve Context", "requires_reason": True},
+            {"action": "reject_context", "label": "Reject Context", "requires_reason": True},
+        ],
+        "ready_for_agent_handoff": [
+            {"action": "export_handoff", "label": "Export Agent Handoff", "requires_reason": True},
+        ],
+        "ready_for_runtime_adapter": [
+            {"action": "export_adapter", "label": "Export Runtime Adapter", "requires_reason": True, "requires_command": True},
+        ],
+        "ready_for_answer_prepare": [
+            {"action": "prepare_answer", "label": "Prepare Answer Packet", "requires_reason": True},
+        ],
+        "awaiting_answer_output": [
+            {"action": "run_answer", "label": "Run Answer Command", "requires_reason": True, "requires_command": True},
+            {"action": "record_answer", "label": "Record Answer", "requires_reason": True, "requires_answer_text": True},
+        ],
+        "answer_rejected": [
+            {"action": "rerun_answer", "label": "Rerun Answer Command", "requires_reason": True, "requires_command": True},
+            {"action": "record_revised_answer", "label": "Record Revised Answer", "requires_reason": True, "requires_answer_text": True},
+        ],
+        "answer_failed": [
+            {"action": "rerun_answer", "label": "Rerun Answer Command", "requires_reason": True, "requires_command": True},
+            {"action": "record_revised_answer", "label": "Record Revised Answer", "requires_reason": True, "requires_answer_text": True},
+        ],
+        "awaiting_answer_review": [
+            {"action": "approve_answer", "label": "Approve Answer", "requires_reason": True},
+            {"action": "reject_answer", "label": "Reject Answer", "requires_reason": True},
+        ],
+        "ready_for_execution_prepare": [
+            {"action": "prepare_execution", "label": "Prepare Execution", "requires_reason": True},
+        ],
+        "awaiting_execution": [
+            {"action": "run_execution", "label": "Run Command", "requires_reason": True, "requires_command": True},
+        ],
+        "execution_rejected": [
+            {"action": "rerun_execution", "label": "Rerun Command", "requires_reason": True, "requires_command": True},
+        ],
+        "awaiting_execution_review": [
+            {"action": "approve_execution", "label": "Approve Execution", "requires_reason": True},
+            {"action": "reject_execution", "label": "Reject Execution", "requires_reason": True},
+        ],
+    }
+    return actions.get(status, [])
+
+
 def render_action_controls(status: str) -> str:
     if status in {"awaiting_context_generation", "context_rejected"}:
         return action_form("generate_context", "Generate Context", reason=True)
@@ -247,7 +322,20 @@ def run_runtime_review_server(
 
     server = ThreadingHTTPServer((host, int(port)), Handler)
     url = f"http://{host}:{server.server_address[1]}/"
-    print(json.dumps({"status": "serving", "url": url, "session_id": session_id, "out_root": str(root)}, ensure_ascii=False), flush=True)
+    print(
+        json.dumps(
+            {
+                "status": "serving",
+                "url": url,
+                "api_session_url": f"{url}api/session",
+                "api_action_url": f"{url}api/action",
+                "session_id": session_id,
+                "out_root": str(root),
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     try:
         try:
             server.serve_forever()
@@ -263,12 +351,18 @@ class RuntimeReviewRequestHandler(BaseHTTPRequestHandler):
     session_id: str
 
     def do_GET(self) -> None:
+        if self.path == "/api/session":
+            self.respond_json(runtime_review_api_payload(self.out_root, self.session_id))
+            return
         if self.path not in {"/", "/index.html"}:
             self.send_error(HTTPStatus.NOT_FOUND, "not found")
             return
         self.respond_html(render_runtime_review_html(self.out_root, self.session_id))
 
     def do_POST(self) -> None:
+        if self.path == "/api/action":
+            self.handle_json_action()
+            return
         if self.path != "/action":
             self.send_error(HTTPStatus.NOT_FOUND, "not found")
             return
@@ -288,10 +382,45 @@ class RuntimeReviewRequestHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self.respond_html(render_runtime_review_html(self.out_root, self.session_id, notice=f"Action failed: {exc}"), status=HTTPStatus.BAD_REQUEST)
 
+    def handle_json_action(self) -> None:
+        length = int(self.headers.get("Content-Length") or "0")
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8", errors="replace") or "{}")
+            if not isinstance(payload, dict):
+                raise ValueError("JSON action payload must be an object")
+            result = handle_runtime_review_action(
+                self.out_root,
+                self.session_id,
+                action=str(payload.get("action") or ""),
+                reason=str(payload.get("reason") or ""),
+                answer_text=str(payload.get("answer_text") or ""),
+                command=str(payload.get("command") or ""),
+                cwd=str(payload.get("cwd") or "") or None,
+                timeout_seconds=int(payload.get("timeout_seconds") or 120),
+            )
+            response = {
+                "runtime_review_server_version": RUNTIME_REVIEW_SERVER_VERSION,
+                "status": "ok",
+                "action": payload.get("action"),
+                "result": result,
+                "session": runtime_review_api_payload(self.out_root, self.session_id),
+            }
+            self.respond_json(response)
+        except Exception as exc:
+            self.respond_json({"status": "error", "error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
     def respond_html(self, body: str, status: HTTPStatus = HTTPStatus.OK) -> None:
         encoded = body.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def respond_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
+        encoded = (json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)

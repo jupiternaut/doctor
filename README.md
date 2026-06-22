@@ -146,7 +146,17 @@ runtime. `runtime-acceptance` writes a GitHub handoff report under
 `reports/runtime-vm-acceptance-*.md` plus latest copies. See
 [Doctor Runtime VM](docs/DOCTOR_RUNTIME_VM.md) for the directory contract.
 `runtime-review-server` starts a localhost review page with approve/reject
-buttons for the current gate.
+buttons for the current gate. It also exposes a native-client JSON API:
+
+```text
+GET  /api/session
+POST /api/action
+```
+
+`/api/session` returns the current runtime session, review preview,
+acceptance gaps, and allowed actions. `/api/action` accepts JSON like
+`{"action":"approve_context","reason":"context matches intent"}` and returns
+the refreshed session payload.
 
 For Codex++, Warp, Codex CLI, or an MCP client, prefer the unified preflight
 entrypoint. It returns `agent_preflight.md/json`, which tells the client which

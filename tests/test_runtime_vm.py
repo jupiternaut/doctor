@@ -22,6 +22,7 @@ from agent_context.mcp_server import (
 from agent_context.runtime_review_server import (
     RuntimeReviewRequestHandler,
     handle_runtime_review_action,
+    runtime_review_api_payload,
     render_runtime_review_html,
 )
 from agent_context.runtime_adapters import export_runtime_adapter_package
@@ -337,6 +338,10 @@ def test_runtime_review_html_and_action_handler_advance_context_gate(tmp_path: P
     assert "awaiting_context_review" in html
     assert "Approve Context" in html
     assert "Review this payload." in html
+    api_payload = runtime_review_api_payload(out, "doctor-review-ui")
+    assert api_payload["runtime_session"]["status"] == "awaiting_context_review"
+    assert api_payload["review_preview"].startswith("# Model Input")
+    assert [action["action"] for action in api_payload["allowed_actions"]] == ["approve_context", "reject_context"]
 
     result = handle_runtime_review_action(
         out,
@@ -438,12 +443,16 @@ def test_runtime_review_http_server_handles_clickable_context_approval(tmp_path:
         page = urllib.request.urlopen(base_url, timeout=5).read().decode("utf-8")
         assert "Approve Context" in page
         assert "HTTP preview." in page
+        api_session = json.loads(urllib.request.urlopen(f"{base_url}/api/session", timeout=5).read().decode("utf-8"))
+        assert api_session["runtime_session"]["status"] == "awaiting_context_review"
+        assert "HTTP preview." in api_session["review_preview"]
+        assert [action["action"] for action in api_session["allowed_actions"]] == ["approve_context", "reject_context"]
 
-        data = urllib.parse.urlencode({"action": "approve_context", "reason": "context ok"}).encode("utf-8")
-        request = urllib.request.Request(f"{base_url}/action", data=data, method="POST")
-        after = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
-        assert "Action applied." in after
-        assert "Export Agent Handoff" in after
+        data = json.dumps({"action": "approve_context", "reason": "context ok"}).encode("utf-8")
+        request = urllib.request.Request(f"{base_url}/api/action", data=data, headers={"Content-Type": "application/json"}, method="POST")
+        after_json = json.loads(urllib.request.urlopen(request, timeout=5).read().decode("utf-8"))
+        assert after_json["status"] == "ok"
+        assert after_json["session"]["runtime_session"]["status"] == "ready_for_agent_handoff"
         assert inspect_runtime_session(out, "doctor-http-ui")["status"] == "ready_for_agent_handoff"
 
         data = urllib.parse.urlencode({"action": "export_handoff", "reason": "context handoff ok"}).encode("utf-8")

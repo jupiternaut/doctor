@@ -123,6 +123,8 @@ uv run ./doctor v1-refresh \
   without embedding resolver logic.
 - Doctor can export a runtime adapter package for Codex++, Warp, Codex CLI, and
   MCP clients under `runtime/sessions/<session-id>/adapters/`.
+- Doctor's review server now exposes `GET /api/session` and `POST /api/action`
+  for native Codex++/Warp panels, in addition to the local HTML review page.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
 

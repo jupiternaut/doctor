@@ -183,6 +183,7 @@ def render_target_doc(manifest: dict[str, Any], target: str) -> str:
         "",
         "- Show the current review file to the user before advancing a gate.",
         "- Prefer `doctor agent-preflight` / `doctor_agent_preflight` as the default entrypoint instead of calling low-level resolver tools directly.",
+        "- For native UI panels, poll `GET /api/session` on the review server and submit gate actions with `POST /api/action` JSON.",
         "- Use `agent_handoff.md` / `model_input.md` as the only approved local context payload.",
         "- Use the answer command adapter or record an answer file before execution.",
         "- Record approve/reject decisions through Doctor instead of hiding them in chat history.",

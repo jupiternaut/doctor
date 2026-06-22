@@ -216,7 +216,7 @@ Codex++, Warp, or another shell can render this object without learning the
 internal session layout. A user can see the current review gate and then run the
 listed approve/reject command.
 
-## Clickable Review Server
+## Review Server
 
 `runtime-review-server` binds to `127.0.0.1` by default and renders the current
 session gate in a browser. It shows:
@@ -228,6 +228,21 @@ session gate in a browser. It shows:
 - approve/reject or prepare/run/record buttons for the current gate
 - export the approved context handoff after context review passes
 - export the runtime adapter package after handoff
+
+It also exposes a JSON API for native Codex++/Warp panels:
+
+```text
+GET  /api/session
+POST /api/action
+```
+
+`/api/session` returns the current runtime session, allowed actions, review
+preview, and acceptance gaps. `/api/action` accepts the same action names as the
+HTML form, such as:
+
+```json
+{"action":"approve_context","reason":"context matches intent"}
+```
 
 The server calls the same stage functions as the CLI:
 
@@ -255,7 +270,7 @@ Implemented:
 - answer-stage command adapter that feeds `answer_packet.md` to local agents on stdin
 - acceptance handoff reports
 - `panel/status.json` runtime VM status for UI clients
-- localhost clickable review server for the current gate
+- localhost HTML and JSON review server for the current gate
 - unified execution artifact manifest/index for command outputs and recorded files
 
 Still outside this shell:
