@@ -14,6 +14,7 @@ from .codebase_memory import build_codebase_memory_index, search_codebase_memory
 from .cold_index import build_cold_index, query_cold_index
 from .codex_plus_smoke import run_codex_plus_smoke
 from .compare import compare_routes
+from .context_review import run_context_review
 from .embedding_benchmark import run_embedding_benchmark
 from .evidence_index import build_evidence_index, search_evidence_index
 from .feedback_model import write_feedback_model
@@ -153,6 +154,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     codex_preflight.add_argument("--mode", choices=["fast", "deep", "arena"], default="fast", help="Preflight mode metadata.")
     codex_preflight.add_argument("--no-auto-context", action="store_true", help="Do not call resolver; emit disabled preflight metadata.")
+
+    context_review = subparsers.add_parser("context-review", help="Generate or record review decisions for Doctor model_input.md.")
+    context_review.add_argument("--action", choices=["generate", "regenerate", "approve", "reject"], default="generate", help="Context review action.")
+    context_review.add_argument("--refined-prompt", default=None, help="Path to refined_prompt.md from agent-context clarify.")
+    context_review.add_argument("--session-id", default=None, help="Runtime session id. Required for approve/reject; optional for generate.")
+    context_review.add_argument("--reason", default="", help="Optional review or regeneration reason.")
+    context_review.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    context_review.add_argument("--limit", type=int, default=12, help="Maximum sources to include for generate/regenerate.")
+    context_review.add_argument(
+        "--source-scope",
+        choices=SOURCE_SCOPE_CHOICES,
+        default="all",
+        help="Restrict resolver source families for generate/regenerate.",
+    )
+    context_review.add_argument("--mode", choices=["fast", "deep", "arena"], default="fast", help="Preflight mode for generate/regenerate.")
 
     panel = subparsers.add_parser("panel", help="Write Context Panel status JSON and a local HTML panel.")
     panel.add_argument("--goal", default=None, help="Optional task goal; when provided, run Codex preflight before writing panel status.")
@@ -631,6 +647,17 @@ def main(argv: list[str] | None = None) -> int:
             source_scope=args.source_scope,
             limit=args.limit,
             auto_context=not args.no_auto_context,
+            mode=args.mode,
+        )
+    elif args.command == "context-review":
+        result = run_context_review(
+            out_root,
+            action=args.action,
+            refined_prompt_path=args.refined_prompt,
+            session_id=args.session_id,
+            reason=args.reason,
+            source_scope=args.source_scope,
+            limit=args.limit,
             mode=args.mode,
         )
     elif args.command == "panel":

@@ -138,6 +138,46 @@ runtime/sessions/<session-id>/refined_prompt.md
 prompt to `codex-preflight`; that second stage generates the reviewable
 `model_input.md` context payload.
 
+Stage 2 turns the accepted prompt into a reviewable Doctor context payload:
+
+```bash
+agent-context context-review \
+  --out /Users/gengrf/agent-context-system \
+  --refined-prompt /Users/gengrf/agent-context-system/runtime/sessions/<session-id>/refined_prompt.md \
+  --action generate \
+  --source-scope all \
+  --limit 8
+```
+
+It writes:
+
+```text
+runtime/sessions/<session-id>/context_review.json
+runtime/sessions/<session-id>/context_review.md
+runtime/sessions/<session-id>/context_review_events.jsonl
+packs/<task-id>-resolve-<timestamp>/model_input.md
+```
+
+Approve or reject the generated model input before any answer stage consumes it:
+
+```bash
+agent-context context-review \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --action approve \
+  --reason "context matches intent"
+
+agent-context context-review \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --action reject \
+  --reason "wrong sources"
+```
+
+Approve/reject events append to `feedback/context_review_feedback.jsonl`.
+`regenerate` reruns `codex-preflight` from the same `refined_prompt.md` after
+changing scope, mode, or limit.
+
 ## Fixture Validation
 
 ```bash
