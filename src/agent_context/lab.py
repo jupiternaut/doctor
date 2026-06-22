@@ -249,13 +249,23 @@ def jpeg_dimensions(path: Path) -> tuple[int | None, int | None]:
 def resolver_goal_for(text: str, attachments: list[dict[str, Any]]) -> str:
     lines = [text.strip()] if text.strip() else []
     if attachments:
-        lines.append("附加图片输入：")
-        for attachment in attachments:
-            bits = [attachment.get("name") or Path(attachment.get("path") or "").name, attachment.get("path") or ""]
-            if attachment.get("width") and attachment.get("height"):
-                bits.append(f"{attachment['width']}x{attachment['height']}")
-            lines.append(" - " + " | ".join(str(bit) for bit in bits if bit))
+        image_count = sum(1 for attachment in attachments if attachment.get("source_type") == "image")
+        hint = attachment_intent_hint(text, attachments)
+        lines.append(f"附加输入: {image_count or len(attachments)} 张图片; 图片内容尚未 OCR")
+        if hint:
+            lines.append(f"attachment_hint: {hint}")
     return "\n".join(lines).strip()
+
+
+def attachment_intent_hint(text: str, attachments: list[dict[str, Any]]) -> str:
+    lower = text.lower()
+    if "简历" in text or "resume" in lower or "cv" in lower:
+        return "resume_image"
+    if "截图" in text or "screenshot" in lower:
+        return "screenshot"
+    if any(attachment.get("source_type") == "image" for attachment in attachments):
+        return "image"
+    return ""
 
 
 def render_lab_input_markdown(text: str, attachments: list[dict[str, Any]], *, run_id: str) -> str:

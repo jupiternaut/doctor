@@ -59,6 +59,12 @@ packs/<task-id>/resolution_plan.json
 `context.md` starts with the exact Lab input. Image attachments are rendered as
 Markdown image links so Codex can see which files were part of the task.
 
+Attachment file names, hashes, and absolute paths are not injected into the
+resolver query. They stay in `input.md` and `attachments.jsonl`; the resolver
+only receives a coarse structured hint such as `attachment_hint: resume_image`.
+This keeps random image hashes and temp paths from polluting local source
+ranking.
+
 `attachments.jsonl` records image path, hash, size, dimensions when available,
 and provider metadata. `agent-context evidence-index` also scans Lab
 attachments, so they can enter the unified evidence bus.

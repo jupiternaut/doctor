@@ -4,7 +4,7 @@ import base64
 from pathlib import Path
 
 from agent_context.io import read_jsonl, write_jsonl
-from agent_context.lab import record_lab_feedback, run_lab_once
+from agent_context.lab import record_lab_feedback, resolver_goal_for, run_lab_once
 
 
 ONE_PIXEL_PNG = base64.b64decode(
@@ -45,6 +45,8 @@ def test_lab_once_accepts_text_and_image_attachment(tmp_path: Path) -> None:
     assert result["images"][0]["height"] == 1
     assert Path(result["input_md_path"]).exists()
     assert str(image_path.resolve()) in Path(result["context_md_path"]).read_text(encoding="utf-8")
+    assert str(image_path.resolve()) not in Path(result["resolution_plan_json_path"]).read_text(encoding="utf-8")
+    assert "attachment_hint: resume_image" in resolver_goal_for("比较我的项目和这份简历", result["images"])
     attachments = read_jsonl(Path(result["attachments_jsonl_path"]))
     assert attachments[0]["source_group"] == "lab_inputs"
     assert result["top_sources"]
