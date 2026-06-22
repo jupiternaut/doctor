@@ -37,7 +37,7 @@ Evidence from the latest local reports:
 | Hot context pack | Latest pack has 12 sources |
 | MCP surface | Live stdio smoke passed, 39 tools exposed |
 | Feedback loop | Replay health ok, latest expected top1 rate 0.833333 |
-| Codex++ integration | Default hook, Manager smoke, model-input review, and answer-review handoff passed |
+| Codex++ integration | Default hook, Manager smoke, model-input review, answer-review handoff, and execution-review prepare passed |
 | Safety | Access policy has 17 deny path patterns |
 | V1 acceptance | 8/10 stages ok; remaining items are time-gated semantic evidence |
 
@@ -148,6 +148,14 @@ uv run ./doctor v1-refresh \
   approved `model_input.md`, `agent_handoff.md`, and `answer_packet.md` paths to
   the turn. This is the first live path where Codex++ can show exactly what it is
   about to feed a model after the user has reviewed Doctor's context.
+- Codex++'s live injected task flow now also recognizes an explicit answer
+  approval such as entering execution review. It records the previous model answer
+  into Doctor, approves `answer_review.json`, advances the active session through
+  `agent-preflight --advance execution`, and appends the reviewable
+  `execution_report.md`, `execution_artifacts.jsonl`, and
+  `execution_artifacts.md` paths back to the turn. This path prepares execution
+  review only; it does not run local commands until the user reviews and approves
+  the exact command or artifact step.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
 - A synthetic end-to-end runtime session
@@ -160,8 +168,8 @@ uv run ./doctor v1-refresh \
 ## Known Gaps
 
 - Warp interception for every task is still not wired as a native runtime
-  entrypoint, and Codex++ still needs native execution/review controls embedded
-  in the live task flow.
+  entrypoint, and Codex++ still needs native command-run/approve controls for the
+  execution gate after the live flow prepares `execution_report.md`.
 - User-facing UI is still weaker than OpenClaw, ChatGPT Projects, and Claude
   Code.
 - Metadata model is not yet as mature as DataHub or OpenMetadata.
