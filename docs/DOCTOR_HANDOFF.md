@@ -131,6 +131,11 @@ uv run ./doctor v1-refresh \
   contract for Codex++/Warp native panels or webviews.
 - Doctor can export `review_launch.json/md` with the review server URL, API
   URLs, generated client path, and exact start/open commands.
+- Codex++ now exposes the second review gate in its Context Panel: after
+  `runtime-task` creates a `refined_prompt.md`, the panel can advance the same
+  session through `agent-preflight --advance context`, persist
+  `model_input.md`, and open that exact model payload for user review before
+  anything is sent to a model.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
 - A synthetic end-to-end runtime session
@@ -142,8 +147,9 @@ uv run ./doctor v1-refresh \
 
 ## Known Gaps
 
-- Default Codex++/Warp interception for every task is still not wired as a
-  native runtime entrypoint.
+- Warp interception for every task is still not wired as a native runtime
+  entrypoint, and Codex++ still needs the same review-gate affordance embedded
+  directly in the live task flow rather than only in Manager.
 - User-facing UI is still weaker than OpenClaw, ChatGPT Projects, and Claude
   Code.
 - Metadata model is not yet as mature as DataHub or OpenMetadata.
