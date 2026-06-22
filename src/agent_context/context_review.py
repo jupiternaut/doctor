@@ -212,19 +212,29 @@ def render_context_review_markdown(review: dict[str, Any]) -> str:
         "Approve this context payload:",
         "",
         "```bash",
-        f"agent-context context-review --out {review_out_hint(review)} --session-id {session_id} --action approve --reason \"context matches intent\"",
+        context_review_command(review, "--action", "approve", "--reason", quote_arg("context matches intent")),
         "```",
         "",
         "Reject this context payload:",
         "",
         "```bash",
-        f"agent-context context-review --out {review_out_hint(review)} --session-id {session_id} --action reject --reason \"wrong sources\"",
+        context_review_command(review, "--action", "reject", "--reason", quote_arg("wrong sources")),
         "```",
         "",
         "Regenerate after changing scope or limit:",
         "",
         "```bash",
-        f"agent-context context-review --out {review_out_hint(review)} --session-id {session_id} --action regenerate --source-scope all --limit {review['limit']} --reason \"try broader context\"",
+        context_review_command(
+            review,
+            "--action",
+            "regenerate",
+            "--source-scope",
+            "all",
+            "--limit",
+            str(review["limit"]),
+            "--reason",
+            quote_arg("try broader context"),
+        ),
         "```",
         "",
     ]
@@ -245,3 +255,30 @@ def render_context_review_markdown(review: dict[str, Any]) -> str:
 def review_out_hint(review: dict[str, Any]) -> str:
     path = Path(str(review["context_review_json_path"]))
     return str(path.parents[3]) if len(path.parents) >= 4 else "."
+
+
+def context_review_command(review: dict[str, Any], *args: str) -> str:
+    out_root = Path(review_out_hint(review))
+    return " ".join(
+        [
+            doctor_executable(out_root),
+            "context-review",
+            "--out",
+            quote_arg(str(out_root)),
+            "--session-id",
+            str(review["session_id"]),
+            *args,
+        ]
+    )
+
+
+def doctor_executable(root: Path) -> str:
+    wrapper = root / "doctor"
+    if wrapper.exists():
+        return quote_arg(str(wrapper))
+    return "doctor"
+
+
+def quote_arg(value: str) -> str:
+    escaped = value.replace("'", "'\"'\"'")
+    return f"'{escaped}'"

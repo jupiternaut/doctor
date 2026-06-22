@@ -83,6 +83,9 @@ def test_context_review_generates_model_input_from_refined_prompt(tmp_path: Path
     assert calls["mode"] == "deep"
     assert Path(result["context_review_json_path"]).exists()
     assert Path(result["context_review_md_path"]).exists()
+    markdown = Path(result["context_review_md_path"]).read_text(encoding="utf-8")
+    assert "doctor context-review" in markdown
+    assert "agent-context context-review" not in markdown
     assert result["preflight"]["model_input_md_path"].endswith("model_input.md")
     assert read_jsonl(Path(result["events_jsonl_path"]))[-1]["action"] == "generate"
     assert not (out / "feedback" / "context_review_feedback.jsonl").exists()

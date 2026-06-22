@@ -181,13 +181,41 @@ def render_refined_prompt(clarification: dict[str, Any]) -> str:
             "If this prompt is accepted, generate the reviewable model input with:",
             "",
             "```bash",
-            (
-                f"doctor context-review --out {clarification['out_root']} "
-                f"--session-id {clarification['session_id']} --action generate "
-                f"--source-scope {clarification['source_scope_hint']} --limit 8"
-            ),
+            clarify_next_command(clarification),
             "```",
             "",
         ]
     )
     return "\n".join(lines)
+
+
+def clarify_next_command(clarification: dict[str, Any]) -> str:
+    out_root = str(clarification["out_root"])
+    return " ".join(
+        [
+            doctor_executable(Path(out_root)),
+            "context-review",
+            "--out",
+            quote_arg(out_root),
+            "--session-id",
+            str(clarification["session_id"]),
+            "--action",
+            "generate",
+            "--source-scope",
+            str(clarification["source_scope_hint"]),
+            "--limit",
+            "8",
+        ]
+    )
+
+
+def doctor_executable(root: Path) -> str:
+    wrapper = root / "doctor"
+    if wrapper.exists():
+        return quote_arg(str(wrapper))
+    return "doctor"
+
+
+def quote_arg(value: str) -> str:
+    escaped = value.replace("'", "'\"'\"'")
+    return f"'{escaped}'"

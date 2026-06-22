@@ -537,8 +537,20 @@ def next_state(
 
 
 def doctor_command(root: Path, command: str, *args: str) -> str:
-    parts = ["doctor", command, "--out", str(root), *args]
+    parts = [doctor_executable(root), command, "--out", quote_arg(str(root)), *args]
     return " ".join(parts)
+
+
+def doctor_executable(root: Path) -> str:
+    wrapper = root / "doctor"
+    if wrapper.exists():
+        return quote_arg(str(wrapper))
+    return "doctor"
+
+
+def quote_arg(value: str) -> str:
+    escaped = value.replace("'", "'\"'\"'")
+    return f"'{escaped}'"
 
 
 def quote_goal(value: str) -> str:

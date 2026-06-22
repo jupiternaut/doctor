@@ -264,7 +264,14 @@ def render_codex_cli_wrapper(root: Path, session_id: str, manifest: dict[str, An
 
 
 def doctor_command(root: Path, command: str, *args: str) -> str:
-    return " ".join(["doctor", command, "--out", quote_arg(str(root)), *args])
+    return " ".join([doctor_executable(root), command, "--out", quote_arg(str(root)), *args])
+
+
+def doctor_executable(root: Path) -> str:
+    wrapper = root / "doctor"
+    if wrapper.exists():
+        return quote_arg(str(wrapper))
+    return "doctor"
 
 
 def quote_arg(value: str) -> str:
