@@ -113,13 +113,18 @@ uv run ./doctor v1-refresh \
   --with-manager-feedback-smoke
 ```
 
-## Known Gaps
+## Runtime Baseline
 
 - Doctor now has a stable `doctor run` four-stage runtime shell with no-index
   clarification, reviewable context generation, answer review, and execution
   review.
+- Doctor can export a runtime adapter package for Codex++, Warp, Codex CLI, and
+  MCP clients under `runtime/sessions/<session-id>/adapters/`.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
+
+## Known Gaps
+
 - Default Codex++/Warp interception for every task is still not wired as a
   native runtime entrypoint.
 - User-facing UI is still weaker than OpenClaw, ChatGPT Projects, and Claude

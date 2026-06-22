@@ -53,6 +53,7 @@ from .resolver import resolve_context as run_context_resolver
 from .retrieval_eval import run_retrieval_eval
 from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
+from .runtime_adapters import export_runtime_adapter_package
 from .runtime_health import run_runtime_health, run_semantic_readiness
 from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status as read_semantic_index_status
@@ -177,6 +178,28 @@ def mcp_doctor_runtime_handoff(session_id: str, out_root: str | None = None) -> 
         }
     except (FileNotFoundError, ValueError) as exc:
         return runtime_mcp_error("runtime_handoff", "export", session_id, exc)
+
+
+def mcp_doctor_runtime_adapter(
+    session_id: str,
+    targets: list[str] | None = None,
+    agent_command: str = "<agent command>",
+    review_port: int = 8765,
+    out_root: str | None = None,
+) -> dict[str, Any]:
+    try:
+        return {
+            "mcp_version": MCP_VERSION,
+            **export_runtime_adapter_package(
+                resolve_out_root(out_root),
+                session_id,
+                targets=targets,
+                agent_command=agent_command,
+                review_port=max(1, review_port),
+            ),
+        }
+    except (FileNotFoundError, ValueError) as exc:
+        return runtime_mcp_error("runtime_adapter", "export", session_id, exc)
 
 
 def mcp_doctor_context_review(
@@ -1370,6 +1393,22 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
     def doctor_runtime_handoff(session_id: str) -> dict[str, Any]:
         """Export approved Doctor context for Codex++, Warp, or Doctor."""
         return mcp_doctor_runtime_handoff(session_id=session_id, out_root=str(root))
+
+    @server.tool()
+    def doctor_runtime_adapter(
+        session_id: str,
+        targets: list[str] | None = None,
+        agent_command: str = "<agent command>",
+        review_port: int = 8765,
+    ) -> dict[str, Any]:
+        """Export adapter files for Codex++, Warp, Codex CLI, and MCP clients."""
+        return mcp_doctor_runtime_adapter(
+            session_id=session_id,
+            targets=targets,
+            agent_command=agent_command,
+            review_port=review_port,
+            out_root=str(root),
+        )
 
     @server.tool()
     def doctor_context_review(

@@ -221,7 +221,20 @@ agent-context runtime-handoff \
 It writes `runtime/sessions/<session-id>/agent_handoff.md` and
 `runtime/sessions/<session-id>/agent_handoff.json`.
 
-Stage 3 prepares and reviews the actual answer. It refuses to run until
+Export adapter files for Codex++, Warp, Codex CLI, and MCP clients:
+
+```bash
+agent-context runtime-adapter \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --agent-command "<agent command>"
+```
+
+It writes `runtime/sessions/<session-id>/adapters/adapter_manifest.json` plus
+client-facing Markdown and shell helper files.
+
+Stage 3 prepares and reviews the actual answer. The formal runtime flow exports
+the adapter package before this step; `answer-review` itself refuses to run until
 `context_review.json` is approved and `agent_handoff.md` exists:
 
 ```bash
@@ -553,7 +566,8 @@ uv run agent-context mcp --out /Users/gengrf/agent-context-system
 The MCP server exposes local tools for `resolve_context`, `search_context`,
 `index_context`, `refresh_providers`, `index_projects`,
 `doctor_run`, `doctor_session`, `doctor_runtime_acceptance`,
-`doctor_runtime_handoff`, `doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,
+`doctor_runtime_handoff`, `doctor_runtime_adapter`,
+`doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,
 `codebase_memory_index`, `codebase_memory_search`, `index_sessions`, `build_hot_pack`, `read_source`,
 `context_panel`, `record_feedback`, `record_panel_feedback`,
 `resolve_alternative_context`,

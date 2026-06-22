@@ -40,6 +40,9 @@ doctor_runtime_acceptance(session_id)
 doctor_runtime_handoff(session_id)
   Export the approved model_input.md as an agent_handoff.md/json packet for Codex++, Warp, or Doctor.
 
+doctor_runtime_adapter(session_id, targets=null, agent_command="<agent command>", review_port=8765)
+  Export adapter files for Codex++, Warp, Codex CLI, and MCP clients. The package includes adapter_manifest.json, target-specific Markdown, shell environment helpers, and an MCP tool sequence.
+
 doctor_context_review(action="generate", session_id=null, refined_prompt_path=null, reason="", source_scope="all", limit=12, mode="fast")
   Generate, regenerate, approve, or reject the reviewable model_input.md payload.
 

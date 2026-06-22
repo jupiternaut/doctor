@@ -40,6 +40,15 @@ doctor runtime-handoff \
   --session-id doctor-demo
 ```
 
+Export client adapter files for Codex++, Warp, Codex CLI, and MCP:
+
+```bash
+doctor runtime-adapter \
+  --out /Users/gengrf/agent-context-system \
+  --session-id doctor-demo \
+  --agent-command "<agent command>"
+```
+
 Open a clickable localhost review page:
 
 ```bash
@@ -73,6 +82,7 @@ user task
   -> context-review generate
   -> user reviews model_input.md
   -> runtime-handoff exports approved model input for Codex++/Warp/Doctor
+  -> runtime-adapter exports client adapter files
   -> answer-review prepare/run/record
   -> user reviews answer.md
   -> execution-review prepare/run
@@ -97,6 +107,7 @@ runtime/sessions/<session-id>/
   context_review_events.jsonl
   agent_handoff.json
   agent_handoff.md
+  adapters/
   answer_review.json
   answer_packet.md
   answer.md
@@ -130,6 +141,7 @@ The MCP server exposes:
 - `doctor_session`: inspect and refresh `DOCTOR_SESSION.md`
 - `doctor_runtime_acceptance`: write the session acceptance handoff
 - `doctor_runtime_handoff`: export approved `model_input.md` for Codex++, Warp, or Doctor
+- `doctor_runtime_adapter`: export adapter files for Codex++, Warp, Codex CLI, and MCP clients
 - `doctor_context_review`: generate, regenerate, approve, or reject `model_input.md`
 - `doctor_answer_review`: prepare, run, record, approve, or reject the answer packet
 - `doctor_execution_review`: prepare, run, record, approve, or reject local artifacts
@@ -155,6 +167,7 @@ The report checks:
 - stage 1 has `doctor_access=false`, `resolver_called=false`, and `index_access=false`
 - stage 2 has generated and approved `model_input.md`
 - the approved context has an `agent_handoff.md` bridge for external agents
+- the runtime has an adapter package for Codex++/Warp/Codex CLI/MCP clients
 - stage 3 has recorded and approved an answer
 - stage 4 has run or recorded an artifact and approved the execution output
 - stage 4 has indexed produced files in `execution_artifacts.jsonl`
@@ -180,6 +193,7 @@ The object includes:
 - `session_id`
 - `review_file`
 - `agent_handoff_md_path`
+- `runtime_adapter_manifest_json_path`
 - `next_message`
 - `next_commands`
 - `missing_required`
@@ -200,10 +214,12 @@ session gate in a browser. It shows:
 - missing acceptance checks
 - approve/reject or prepare/run/record buttons for the current gate
 - export the approved context handoff after context review passes
+- export the runtime adapter package after handoff
 
 The server calls the same stage functions as the CLI:
 
 - `context-review` for context approve/reject
+- `runtime-adapter` for client adapter export
 - `answer-review` for answer prepare/run/record/approve/reject
 - `execution-review` for execution prepare/run/approve/reject
 
@@ -221,6 +237,7 @@ Implemented:
 - CLI alias through `doctor`
 - MCP tools for all four review gates
 - approved-context handoff export for Codex++/Warp/Doctor
+- runtime adapter package for Codex++/Warp/Codex CLI/MCP clients
 - answer-stage command adapter that feeds `answer_packet.md` to local agents on stdin
 - acceptance handoff reports
 - `panel/status.json` runtime VM status for UI clients
@@ -230,6 +247,6 @@ Implemented:
 Still outside this shell:
 
 - real automatic model answering
-- default Codex++/Warp interception for every task
+- native default Codex++/Warp interception for every task
 - richer execution adapters beyond explicit reviewed commands and recorded artifacts
 - embedded Codex++/Warp native UI for approving each gate

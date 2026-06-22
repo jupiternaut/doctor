@@ -47,6 +47,7 @@ from .retrieval_eval import run_retrieval_eval
 from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_health import run_runtime_health, run_semantic_readiness
+from .runtime_adapters import export_runtime_adapter_package
 from .runtime_review_server import run_runtime_review_server
 from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status
@@ -126,6 +127,13 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_handoff = subparsers.add_parser("runtime-handoff", help="Export approved Doctor context for Codex++, Warp, or Doctor.")
     runtime_handoff.add_argument("--session-id", required=True, help="Runtime session id to export.")
     runtime_handoff.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    runtime_adapter = subparsers.add_parser("runtime-adapter", help="Export adapter files for Codex++, Warp, Codex CLI, and MCP clients.")
+    runtime_adapter.add_argument("--session-id", required=True, help="Runtime session id to export adapters for.")
+    runtime_adapter.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    runtime_adapter.add_argument("--target", action="append", default=None, help="Adapter target: codex-plus, warp, codex-cli, mcp, or all. Can be passed more than once.")
+    runtime_adapter.add_argument("--agent-command", default="<agent command>", help="Default command used by answer-review --action run.")
+    runtime_adapter.add_argument("--review-port", type=int, default=8765, help="Local review server port included in generated adapter docs.")
 
     runtime_review_server = subparsers.add_parser("runtime-review-server", help="Serve a local clickable Doctor runtime review UI.")
     runtime_review_server.add_argument("--session-id", required=True, help="Runtime session id to review.")
@@ -684,6 +692,30 @@ def main(argv: list[str] | None = None) -> int:
                     {
                         "status": "error",
                         "command": "runtime-handoff",
+                        "session_id": args.session_id,
+                        "error": str(exc),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 1
+    elif args.command == "runtime-adapter":
+        try:
+            result = export_runtime_adapter_package(
+                out_root,
+                args.session_id,
+                targets=args.target,
+                agent_command=args.agent_command,
+                review_port=args.review_port,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "command": "runtime-adapter",
                         "session_id": args.session_id,
                         "error": str(exc),
                     },

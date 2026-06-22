@@ -21,6 +21,7 @@ REQUIRED_TOOLS = [
     "doctor_session",
     "doctor_runtime_acceptance",
     "doctor_runtime_handoff",
+    "doctor_runtime_adapter",
     "doctor_context_review",
     "doctor_answer_review",
     "doctor_execution_review",

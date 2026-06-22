@@ -90,6 +90,7 @@ def run_runtime_vm_acceptance(out_root: str | Path, session_id: str) -> dict[str
             "doctor_session",
             "doctor_runtime_acceptance",
             "doctor_runtime_handoff",
+            "doctor_runtime_adapter",
             "doctor_context_review",
             "doctor_answer_review",
             "doctor_execution_review",
@@ -210,6 +211,12 @@ def runtime_acceptance_checks(session: dict[str, Any]) -> list[dict[str, Any]]:
             "agent_handoff",
             "Approved context is exported as a Codex++/Warp/Doctor handoff",
             files["agent_handoff_md_path"],
+            required=True,
+        ),
+        file_check(
+            "runtime_adapter_package",
+            "Runtime adapter package exists for Codex++/Warp/Codex CLI/MCP clients",
+            files["runtime_adapter_manifest_json_path"],
             required=True,
         ),
         bool_check(
@@ -411,6 +418,15 @@ def determine_next_state(root: Path, session_id: str, stages: list[dict[str, Any
             ready=True,
             review_file=context.get("model_input_md_path") or context["review_path"],
         )
+    adapter_path = root / "runtime" / "sessions" / session_id / "adapters" / "adapter_manifest.json"
+    if not adapter_path.exists() and not answer["exists"]:
+        return next_state(
+            "ready_for_runtime_adapter",
+            "Export the Doctor runtime adapter package for Codex++, Warp, Codex CLI, or MCP clients.",
+            [doctor_command(root, "runtime-adapter", "--session-id", session_id)],
+            ready=True,
+            review_file=str(handoff_path),
+        )
     if not answer["exists"]:
         return next_state(
             "ready_for_answer_prepare",
@@ -547,6 +563,9 @@ def runtime_file_contract(root: Path, session_id: str, stages: list[dict[str, An
         "sources_jsonl_path": by_name["context_review"].get("sources_jsonl_path"),
         "agent_handoff_json_path": str(session_dir / "agent_handoff.json"),
         "agent_handoff_md_path": str(session_dir / "agent_handoff.md"),
+        "runtime_adapters_dir": str(session_dir / "adapters"),
+        "runtime_adapter_manifest_json_path": str(session_dir / "adapters" / "adapter_manifest.json"),
+        "runtime_adapter_overview_md_path": str(session_dir / "adapters" / "DOCTOR_RUNTIME_ADAPTER.md"),
         "answer_review_json_path": str(session_dir / "answer_review.json"),
         "answer_packet_md_path": str(session_dir / "answer_packet.md"),
         "answer_md_path": str(session_dir / "answer.md"),
@@ -581,6 +600,7 @@ def render_session_markdown(session: dict[str, Any]) -> str:
         f"- Review file: `{session['next'].get('review_file')}`",
         "",
         f"- Agent handoff: `{session['files']['agent_handoff_md_path']}`",
+        f"- Runtime adapter: `{session['files']['runtime_adapter_manifest_json_path']}`",
         "",
         "## Stages",
         "",
@@ -626,6 +646,7 @@ def render_session_markdown(session: dict[str, Any]) -> str:
             "  context_review_events.jsonl",
             "  agent_handoff.json",
             "  agent_handoff.md",
+            "  adapters/",
             "  answer_review.json",
             "  answer_packet.md",
             "  answer.md",

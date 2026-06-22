@@ -11,6 +11,7 @@ from urllib.parse import parse_qs
 from .answer_review import run_answer_review
 from .context_review import run_context_review
 from .execution_review import run_execution_review
+from .runtime_adapters import export_runtime_adapter_package
 from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance
 
 
@@ -39,6 +40,8 @@ def handle_runtime_review_action(
         result = run_context_review(root, action="approve" if action == "approve_context" else "reject", session_id=session_id, reason=reason)
     elif action == "export_handoff" and status == "ready_for_agent_handoff":
         result = export_runtime_handoff(root, session_id)
+    elif action == "export_adapter" and status == "ready_for_runtime_adapter":
+        result = export_runtime_adapter_package(root, session_id, agent_command=command or "<agent command>")
     elif action == "prepare_answer" and status == "ready_for_answer_prepare":
         result = run_answer_review(root, action="prepare", session_id=session_id, reason=reason)
     elif action in {"run_answer", "rerun_answer"} and status in {"awaiting_answer_output", "answer_rejected", "answer_failed"}:
@@ -150,6 +153,8 @@ def render_action_controls(status: str) -> str:
         return action_form("approve_context", "Approve Context", reason=True) + action_form("reject_context", "Reject Context", reason=True, secondary=True)
     if status == "ready_for_agent_handoff":
         return action_form("export_handoff", "Export Agent Handoff", reason=True)
+    if status == "ready_for_runtime_adapter":
+        return action_form("export_adapter", "Export Runtime Adapter", command=True, reason=True, command_value="<agent command>")
     if status == "ready_for_answer_prepare":
         return action_form("prepare_answer", "Prepare Answer Packet", reason=True)
     if status in {"awaiting_answer_output", "answer_rejected", "answer_failed"}:
