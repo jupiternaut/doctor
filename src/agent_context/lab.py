@@ -8,8 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .comparison import build_comparison_pack, is_comparison_task, left_goal_for_comparison
 from .io import append_jsonl, ensure_dir, read_jsonl, write_jsonl, write_text
 from .panel import record_panel_feedback
+from .resume import extract_resume_from_attachments
 from .resolver import resolve_context
 
 
@@ -51,8 +53,6 @@ def run_lab_once(
     if not goal.strip():
         raise ValueError("doctor lab requires text or at least one image path")
 
-    resolve_result = resolve_context(out_root, goal, limit=max(1, limit), source_scope=source_scope)
-    sources = read_jsonl(Path(resolve_result["sources_jsonl_path"]))
     run_id = datetime.now().strftime("lab-%Y%m%d%H%M%S%f")
     run_dir = ensure_dir(out_root / "lab" / "runs" / run_id)
     input_md_path = run_dir / "input.md"
@@ -76,22 +76,58 @@ def run_lab_once(
     ]
     write_jsonl(attachments_path, attachment_records)
     write_text(input_md_path, render_lab_input_markdown(text, attachments, run_id=run_id))
-    prepend_lab_input_to_context(Path(resolve_result["context_md_path"]), input_md_path)
+
+    resume = extract_resume_from_attachments(attachments, run_dir) if attachment_intent_hint(text, attachments) == "resume_image" else None
+    if is_comparison_task(text, attachments, resume):
+        left_resolve_result = resolve_context(
+            out_root,
+            left_goal_for_comparison(text),
+            limit=max(1, limit),
+            source_scope=source_scope,
+        )
+        left_sources = read_jsonl(Path(left_resolve_result["sources_jsonl_path"]))
+        comparison_result = build_comparison_pack(
+            out_root,
+            run_id=run_id,
+            user_text=text,
+            input_md_path=input_md_path,
+            attachments=attachments,
+            resume=resume,
+            left_resolve_result=left_resolve_result,
+            left_sources=left_sources,
+        )
+        sources = read_jsonl(Path(comparison_result["sources_jsonl_path"]))
+        task_type = "comparison"
+        context_md_path = comparison_result["context_md_path"]
+        sources_jsonl_path = comparison_result["sources_jsonl_path"]
+        manifest_json_path = comparison_result["manifest_json_path"]
+        plan_json_path = comparison_result["comparison_plan_json_path"]
+    else:
+        resolve_result = resolve_context(out_root, goal, limit=max(1, limit), source_scope=source_scope)
+        sources = read_jsonl(Path(resolve_result["sources_jsonl_path"]))
+        prepend_lab_input_to_context(Path(resolve_result["context_md_path"]), input_md_path)
+        task_type = "resolve"
+        context_md_path = resolve_result["context_md_path"]
+        sources_jsonl_path = resolve_result["sources_jsonl_path"]
+        manifest_json_path = resolve_result["manifest_json_path"]
+        plan_json_path = resolve_result["resolution_plan_json_path"]
 
     result = {
         "lab_version": LAB_VERSION,
         "status": "ok",
+        "task_type": task_type,
         "run_id": run_id,
         "text": text,
         "images": attachments,
+        "resume": compact_resume_result(resume),
         "source_scope": source_scope,
         "limit": max(1, limit),
         "input_md_path": str(input_md_path),
         "attachments_jsonl_path": str(attachments_path),
-        "context_md_path": resolve_result["context_md_path"],
-        "sources_jsonl_path": resolve_result["sources_jsonl_path"],
-        "manifest_json_path": resolve_result["manifest_json_path"],
-        "resolution_plan_json_path": resolve_result["resolution_plan_json_path"],
+        "context_md_path": context_md_path,
+        "sources_jsonl_path": sources_jsonl_path,
+        "manifest_json_path": manifest_json_path,
+        "resolution_plan_json_path": plan_json_path,
         "top_sources": summarize_sources(sources, limit=max(1, limit)),
     }
     write_text(run_json_path, json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
@@ -327,6 +363,7 @@ def summarize_sources(sources: list[dict[str, Any]], *, limit: int) -> list[dict
 
 
 def print_lab_result(result: dict[str, Any]) -> None:
+    print(f"task_type: {result.get('task_type')}")
     print(f"context: {result['context_md_path']}")
     print(f"sources: {result['sources_jsonl_path']}")
     for source in result.get("top_sources") or []:
@@ -389,3 +426,18 @@ def attachment_summary(attachment: dict[str, Any]) -> str:
     if attachment.get("width") and attachment.get("height"):
         parts.append(f"dimensions={attachment['width']}x{attachment['height']}")
     return "; ".join(part for part in parts if part)
+
+
+def compact_resume_result(resume: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not resume:
+        return None
+    return {
+        "resume_schema_version": resume.get("resume_schema_version"),
+        "resume_md_path": resume.get("resume_md_path"),
+        "resume_json_path": resume.get("resume_json_path"),
+        "target_role": resume.get("target_role"),
+        "technologies": resume.get("technologies") or [],
+        "ocr_status": [result.get("status") for result in resume.get("ocr") or []],
+        "ocr_engine": [result.get("engine") for result in resume.get("ocr") or []],
+        "limits": resume.get("limits") or [],
+    }

@@ -166,6 +166,13 @@ def collect_evidence_records(out_root: Path) -> list[dict[str, Any]]:
                 defaults={"source_group": "lab_inputs", "provider": "doctor_lab"},
             )
         )
+    for resume_sources_path in sorted((out_root / "lab").glob("runs/*/resume_sources.jsonl")):
+        records.extend(
+            records_from_jsonl(
+                resume_sources_path,
+                defaults={"source_group": "lab_inputs", "provider": "doctor_resume_ocr"},
+            )
+        )
     return records
 
 

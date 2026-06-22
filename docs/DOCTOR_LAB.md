@@ -69,6 +69,30 @@ ranking.
 and provider metadata. `agent-context evidence-index` also scans Lab
 attachments, so they can enter the unified evidence bus.
 
+## Comparison Tasks
+
+When the prompt looks like a comparison and includes a resume image, Lab uses a
+two-slot comparison schema instead of one mixed resolver list:
+
+```text
+left_user_projects -> local Codex/Doctor/project evidence
+right_resume       -> resume image OCR/KV evidence
+```
+
+The left slot is resolved from local project evidence. The right slot is built
+by `doctor_resume_ocr`, which tries macOS Vision OCR first and falls back to
+Tesseract when available. The resulting run may also write:
+
+```text
+lab/runs/<run-id>/resume.md
+lab/runs/<run-id>/resume.json
+lab/runs/<run-id>/resume_sources.jsonl
+packs/<task-id>/comparison_plan.json
+```
+
+The context pack tells the model to compare the two evidence slots rather than
+treat all retrieved sources as a single top-8 list.
+
 ## Feedback
 
 `/good <n>` and `/bad <n>` write both:
@@ -84,5 +108,5 @@ panel feedback, so Lab choices immediately affect later resolver ranking.
 ## Limitations
 
 Doctor Lab v0.1 records image metadata and inserts image links into the hot
-context pack. It does not perform OCR, visual captioning, or image embeddings.
-Those belong in the future MediaProvider.
+context pack. Resume-image comparison tasks attempt OCR, but general visual
+captioning and image embeddings still belong in the future MediaProvider.
