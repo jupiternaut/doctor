@@ -38,6 +38,13 @@ def write_context_review(out: Path, *, status: str = "approved", session_id: str
     return path
 
 
+def write_agent_handoff(out: Path, *, session_id: str = "session-answer") -> Path:
+    path = out / "runtime" / "sessions" / session_id / "agent_handoff.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# Doctor Agent Handoff\n", encoding="utf-8")
+    return path
+
+
 def test_answer_review_requires_approved_context(tmp_path: Path) -> None:
     out = tmp_path / "out"
     write_context_review(out, status="pending_review")
@@ -48,9 +55,18 @@ def test_answer_review_requires_approved_context(tmp_path: Path) -> None:
     assert not (out / "runtime" / "sessions" / "session-answer" / "answer_review.json").exists()
 
 
+def test_answer_review_requires_agent_handoff(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    write_context_review(out, status="approved")
+
+    with pytest.raises(ValueError, match="agent_handoff.md"):
+        run_answer_review(out, action="prepare", session_id="session-answer")
+
+
 def test_answer_review_prepare_record_and_feedback(tmp_path: Path) -> None:
     out = tmp_path / "out"
     write_context_review(out, status="approved")
+    write_agent_handoff(out)
 
     prepared = run_answer_review(out, action="prepare", session_id="session-answer", reason="approved context")
 
@@ -86,6 +102,7 @@ def test_answer_review_prepare_record_and_feedback(tmp_path: Path) -> None:
 def test_answer_review_cli_records_answer_from_file(tmp_path: Path, capsys) -> None:
     out = tmp_path / "out"
     write_context_review(out, status="approved", session_id="session-cli-answer")
+    write_agent_handoff(out, session_id="session-cli-answer")
     run_answer_review(out, action="prepare", session_id="session-cli-answer")
     answer_file = tmp_path / "answer.md"
     answer_file.write_text("这是从 Codex++ 或 Warp 产出的答案。", encoding="utf-8")

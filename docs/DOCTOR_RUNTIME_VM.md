@@ -32,6 +32,14 @@ doctor runtime-acceptance \
   --session-id doctor-demo
 ```
 
+Export the approved context for Codex++, Warp, or Doctor:
+
+```bash
+doctor runtime-handoff \
+  --out /Users/gengrf/agent-context-system \
+  --session-id doctor-demo
+```
+
 Open a clickable localhost review page:
 
 ```bash
@@ -64,6 +72,7 @@ user task
   -> user reviews refined_prompt.md
   -> context-review generate
   -> user reviews model_input.md
+  -> runtime-handoff exports approved model input for Codex++/Warp/Doctor
   -> answer-review prepare/record
   -> user reviews answer.md
   -> execution-review prepare/run
@@ -86,6 +95,8 @@ runtime/sessions/<session-id>/
   context_review.json
   context_review.md
   context_review_events.jsonl
+  agent_handoff.json
+  agent_handoff.md
   answer_review.json
   answer_packet.md
   answer.md
@@ -115,6 +126,7 @@ The MCP server exposes:
 - `doctor_run`: create a no-index runtime session
 - `doctor_session`: inspect and refresh `DOCTOR_SESSION.md`
 - `doctor_runtime_acceptance`: write the session acceptance handoff
+- `doctor_runtime_handoff`: export approved `model_input.md` for Codex++, Warp, or Doctor
 - `doctor_context_review`: generate, regenerate, approve, or reject `model_input.md`
 - `doctor_answer_review`: prepare, record, approve, or reject the answer packet
 - `doctor_execution_review`: prepare, run, record, approve, or reject local artifacts
@@ -139,6 +151,7 @@ The report checks:
 - `DOCTOR_SESSION.md` and `runtime_session.json` exist
 - stage 1 has `doctor_access=false`, `resolver_called=false`, and `index_access=false`
 - stage 2 has generated and approved `model_input.md`
+- the approved context has an `agent_handoff.md` bridge for external agents
 - stage 3 has recorded and approved an answer
 - stage 4 has run or recorded an artifact and approved the execution output
 - MCP exposes the runtime tools needed by external agents
@@ -162,6 +175,7 @@ The object includes:
 - `ready`
 - `session_id`
 - `review_file`
+- `agent_handoff_md_path`
 - `next_message`
 - `next_commands`
 - `missing_required`
@@ -181,6 +195,7 @@ session gate in a browser. It shows:
 - stage table
 - missing acceptance checks
 - approve/reject or prepare/record/run buttons for the current gate
+- export the approved context handoff after context review passes
 
 The server calls the same stage functions as the CLI:
 
@@ -201,6 +216,7 @@ Implemented:
 - review-gated four-stage file contract
 - CLI alias through `doctor`
 - MCP tools for all four review gates
+- approved-context handoff export for Codex++/Warp/Doctor
 - acceptance handoff reports
 - `panel/status.json` runtime VM status for UI clients
 - localhost clickable review server for the current gate

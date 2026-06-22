@@ -41,6 +41,9 @@ def prepare_answer_review(root: Path, *, session_id: str, reason: str) -> dict[s
     model_input = preflight.get("model_input_md_path")
     if not model_input:
         raise ValueError("approved context_review does not reference model_input.md")
+    handoff_path = root / "runtime" / "sessions" / session_id / "agent_handoff.md"
+    if not handoff_path.exists():
+        raise ValueError("agent_handoff.md must be exported before preparing an answer packet")
     session_dir = ensure_dir(root / "runtime" / "sessions" / session_id)
     review = {
         "answer_review_version": ANSWER_REVIEW_VERSION,

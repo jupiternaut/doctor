@@ -15,6 +15,7 @@ from agent_context.mcp_server import (
     mcp_doctor_execution_review,
     mcp_doctor_run,
     mcp_doctor_runtime_acceptance,
+    mcp_doctor_runtime_handoff,
     mcp_doctor_session,
 )
 from agent_context.runtime_review_server import (
@@ -22,7 +23,7 @@ from agent_context.runtime_review_server import (
     handle_runtime_review_action,
     render_runtime_review_html,
 )
-from agent_context.runtime_vm import inspect_runtime_session, start_runtime_session
+from agent_context.runtime_vm import export_runtime_handoff, inspect_runtime_session, start_runtime_session
 
 
 def test_runtime_vm_starts_no_index_session(tmp_path: Path) -> None:
@@ -79,13 +80,20 @@ def test_runtime_vm_inspects_approved_context_gate(tmp_path: Path) -> None:
 
     result = inspect_runtime_session(out, "doctor-vm-context")
 
-    assert result["status"] == "ready_for_answer_prepare"
+    assert result["status"] == "ready_for_agent_handoff"
     assert result["next"]["ready_for_next_stage"] is True
-    assert "answer-review" in result["next"]["commands"][0]
+    assert "runtime-handoff" in result["next"]["commands"][0]
     assert result["files"]["model_input_md_path"] == str(model_input)
     session_markdown = Path(result["files"]["doctor_session_md_path"]).read_text(encoding="utf-8")
-    assert "ready_for_answer_prepare" in session_markdown
+    assert "ready_for_agent_handoff" in session_markdown
     assert str(model_input) in session_markdown
+
+    handoff = export_runtime_handoff(out, "doctor-vm-context")
+
+    assert handoff["status"] == "ready_for_agent"
+    assert Path(handoff["agent_handoff_md_path"]).exists()
+    assert "Codex++" in Path(handoff["agent_handoff_md_path"]).read_text(encoding="utf-8")
+    assert handoff["runtime_session"]["status"] == "ready_for_answer_prepare"
 
 
 def test_runtime_vm_cli_run_and_session(tmp_path: Path, capsys) -> None:
@@ -120,6 +128,30 @@ def test_runtime_vm_cli_run_and_session(tmp_path: Path, capsys) -> None:
     assert acceptance_result["ready"] is False
     assert acceptance_result["status"] == "awaiting_context_generation"
     assert Path(acceptance_result["latest_md_path"]).exists()
+
+
+def test_runtime_vm_cli_handoff_requires_approved_context(tmp_path: Path, capsys) -> None:
+    out = tmp_path / "out"
+
+    assert main(
+        [
+            "run",
+            "--out",
+            str(out),
+            "--session-id",
+            "doctor-cli-handoff",
+            "--goal",
+            "审查上下文后导出给 Codex++",
+        ]
+    ) == 0
+    capsys.readouterr()
+
+    assert main(["runtime-handoff", "--out", str(out), "--session-id", "doctor-cli-handoff"]) == 1
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["status"] == "error"
+    assert result["command"] == "runtime-handoff"
+    assert "context_review.json" in result["error"]
 
 
 def test_runtime_vm_mcp_tools(tmp_path: Path) -> None:
@@ -191,7 +223,12 @@ def test_runtime_vm_mcp_review_tools_advance_four_stage_session(tmp_path: Path) 
 
     context_approved = mcp_doctor_context_review(action="approve", session_id="doctor-mcp-flow", out_root=str(out))
     assert context_approved["status"] == "approved"
-    assert context_approved["runtime_session"]["status"] == "ready_for_answer_prepare"
+    assert context_approved["runtime_session"]["status"] == "ready_for_agent_handoff"
+
+    handoff = mcp_doctor_runtime_handoff("doctor-mcp-flow", out_root=str(out))
+    assert handoff["status"] == "ready_for_agent"
+    assert Path(handoff["agent_handoff_md_path"]).exists()
+    assert handoff["runtime_session"]["status"] == "ready_for_answer_prepare"
 
     answer_prepared = mcp_doctor_answer_review(action="prepare", session_id="doctor-mcp-flow", out_root=str(out))
     assert answer_prepared["status"] == "awaiting_answer"
@@ -293,7 +330,16 @@ def test_runtime_review_html_and_action_handler_advance_context_gate(tmp_path: P
     )
 
     assert result["status"] == "ok"
-    assert result["runtime_session"]["status"] == "ready_for_answer_prepare"
+    assert result["runtime_session"]["status"] == "ready_for_agent_handoff"
+
+    handoff = handle_runtime_review_action(
+        out,
+        "doctor-review-ui",
+        action="export_handoff",
+        reason="approved context handoff",
+    )
+
+    assert handoff["runtime_session"]["status"] == "ready_for_answer_prepare"
 
     prepared = handle_runtime_review_action(
         out,
@@ -371,7 +417,13 @@ def test_runtime_review_http_server_handles_clickable_context_approval(tmp_path:
         request = urllib.request.Request(f"{base_url}/action", data=data, method="POST")
         after = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
         assert "Action applied." in after
-        assert "Prepare Answer Packet" in after
+        assert "Export Agent Handoff" in after
+        assert inspect_runtime_session(out, "doctor-http-ui")["status"] == "ready_for_agent_handoff"
+
+        data = urllib.parse.urlencode({"action": "export_handoff", "reason": "context handoff ok"}).encode("utf-8")
+        request = urllib.request.Request(f"{base_url}/action", data=data, method="POST")
+        after_handoff = urllib.request.urlopen(request, timeout=5).read().decode("utf-8")
+        assert "Prepare Answer Packet" in after_handoff
         assert inspect_runtime_session(out, "doctor-http-ui")["status"] == "ready_for_answer_prepare"
     finally:
         server.shutdown()

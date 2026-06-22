@@ -11,6 +11,7 @@ from .pack import slugify
 
 
 DOCTOR_RUNTIME_VERSION = "0.1"
+RUNTIME_HANDOFF_VERSION = "0.1"
 
 
 def start_runtime_session(
@@ -88,6 +89,7 @@ def run_runtime_vm_acceptance(out_root: str | Path, session_id: str) -> dict[str
             "doctor_run",
             "doctor_session",
             "doctor_runtime_acceptance",
+            "doctor_runtime_handoff",
             "doctor_context_review",
             "doctor_answer_review",
             "doctor_execution_review",
@@ -103,6 +105,61 @@ def run_runtime_vm_acceptance(out_root: str | Path, session_id: str) -> dict[str
     write_text(latest_json_path, json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     write_text(latest_md_path, markdown)
     return report
+
+
+def export_runtime_handoff(out_root: str | Path, session_id: str) -> dict[str, Any]:
+    root = Path(out_root).expanduser().resolve()
+    session_dir = root / "runtime" / "sessions" / session_id
+    context_review_path = session_dir / "context_review.json"
+    if not context_review_path.exists():
+        raise FileNotFoundError(f"context_review.json not found: {context_review_path}")
+    context_review = json.loads(context_review_path.read_text(encoding="utf-8"))
+    if context_review.get("status") != "approved":
+        raise ValueError("context_review must be approved before exporting an agent handoff")
+    preflight = context_review.get("preflight") or {}
+    model_input_path = preflight.get("model_input_md_path")
+    if not model_input_path or not Path(str(model_input_path)).exists():
+        raise ValueError("approved context_review does not reference an existing model_input.md")
+
+    files = runtime_file_contract(root, session_id, build_stage_states(root, session_id))
+    handoff_md_path = Path(files["agent_handoff_md_path"])
+    handoff_json_path = Path(files["agent_handoff_json_path"])
+    now = datetime.now().astimezone().isoformat()
+    handoff = {
+        "runtime_handoff_version": RUNTIME_HANDOFF_VERSION,
+        "stage": "agent_handoff",
+        "status": "ready_for_agent",
+        "created_at": now,
+        "session_id": session_id,
+        "out_root": str(root),
+        "adapter_targets": ["Codex++", "Warp", "Doctor"],
+        "context_review_json_path": str(context_review_path),
+        "model_input_md_path": str(model_input_path),
+        "context_md_path": preflight.get("context_md_path"),
+        "sources_jsonl_path": preflight.get("sources_jsonl_path"),
+        "manifest_json_path": preflight.get("manifest_json_path"),
+        "resolution_plan_json_path": preflight.get("resolution_plan_json_path"),
+        "answer_packet_md_path": files["answer_packet_md_path"],
+        "answer_md_path": files["answer_md_path"],
+        "agent_handoff_md_path": str(handoff_md_path),
+        "agent_handoff_json_path": str(handoff_json_path),
+        "instructions": [
+            "Use model_input.md as the only approved local-evidence payload for this session.",
+            "Do not read additional local sources unless the user starts a new Doctor review gate.",
+            "Keep evidence, inference, limitations, and next actions separate in the answer.",
+            "After producing an answer, record it through doctor answer-review before local execution.",
+        ],
+        "commands": {
+            "inspect_session": doctor_command(root, "session", "--session-id", session_id),
+            "record_answer": doctor_command(root, "answer-review", "--session-id", session_id, "--action", "record", "--answer-file", "/path/to/answer.md"),
+            "open_review_server": doctor_command(root, "runtime-review-server", "--session-id", session_id, "--port", "8765"),
+            "prepare_answer_packet": doctor_command(root, "answer-review", "--session-id", session_id, "--action", "prepare"),
+        },
+    }
+    write_text(handoff_json_path, json.dumps(handoff, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    write_text(handoff_md_path, render_runtime_handoff_markdown(handoff))
+    handoff["runtime_session"] = inspect_runtime_session(root, session_id)
+    return handoff
 
 
 def persist_runtime_session(session: dict[str, Any]) -> None:
@@ -148,6 +205,12 @@ def runtime_acceptance_checks(session: dict[str, Any]) -> list[dict[str, Any]]:
             context["status"] == "approved",
             required=True,
             evidence=context["state_path"],
+        ),
+        file_check(
+            "agent_handoff",
+            "Approved context is exported as a Codex++/Warp/Doctor handoff",
+            files["agent_handoff_md_path"],
+            required=True,
         ),
         bool_check(
             "answer_packet",
@@ -325,6 +388,15 @@ def determine_next_state(root: Path, session_id: str, stages: list[dict[str, Any
             ready=False,
             review_file=context.get("model_input_md_path") or context["review_path"],
         )
+    handoff_path = root / "runtime" / "sessions" / session_id / "agent_handoff.md"
+    if not handoff_path.exists():
+        return next_state(
+            "ready_for_agent_handoff",
+            "Export the approved context as a Codex++/Warp/Doctor handoff before any agent consumes it.",
+            [doctor_command(root, "runtime-handoff", "--session-id", session_id)],
+            ready=True,
+            review_file=context.get("model_input_md_path") or context["review_path"],
+        )
     if not answer["exists"]:
         return next_state(
             "ready_for_answer_prepare",
@@ -445,6 +517,8 @@ def runtime_file_contract(root: Path, session_id: str, stages: list[dict[str, An
         "model_input_md_path": by_name["context_review"].get("model_input_md_path"),
         "context_md_path": by_name["context_review"].get("context_md_path"),
         "sources_jsonl_path": by_name["context_review"].get("sources_jsonl_path"),
+        "agent_handoff_json_path": str(session_dir / "agent_handoff.json"),
+        "agent_handoff_md_path": str(session_dir / "agent_handoff.md"),
         "answer_review_json_path": str(session_dir / "answer_review.json"),
         "answer_packet_md_path": str(session_dir / "answer_packet.md"),
         "answer_md_path": str(session_dir / "answer.md"),
@@ -474,6 +548,8 @@ def render_session_markdown(session: dict[str, Any]) -> str:
         f"- Ready for next stage: `{str(session['ready_for_next_stage']).lower()}`",
         f"- Message: {session['next']['message']}",
         f"- Review file: `{session['next'].get('review_file')}`",
+        "",
+        f"- Agent handoff: `{session['files']['agent_handoff_md_path']}`",
         "",
         "## Stages",
         "",
@@ -513,6 +589,8 @@ def render_session_markdown(session: dict[str, Any]) -> str:
             "  context_review.json",
             "  context_review.md",
             "  context_review_events.jsonl",
+            "  agent_handoff.json",
+            "  agent_handoff.md",
             "  answer_review.json",
             "  answer_packet.md",
             "  answer.md",
@@ -522,6 +600,61 @@ def render_session_markdown(session: dict[str, Any]) -> str:
             "  execution_review_events.jsonl",
             "  artifacts/",
             "```",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_runtime_handoff_markdown(handoff: dict[str, Any]) -> str:
+    lines = [
+        "---",
+        f"runtime_handoff_version: {handoff['runtime_handoff_version']}",
+        f"stage: {handoff['stage']}",
+        f"status: {handoff['status']}",
+        f"session_id: {handoff['session_id']}",
+        "---",
+        "",
+        "# Doctor Agent Handoff",
+        "",
+        "This is the approved context handoff for Codex++, Warp, or Doctor. It connects the reviewed `model_input.md` to the answer review gate.",
+        "",
+        "## Approved Payload",
+        "",
+        f"- Model input: `{handoff['model_input_md_path']}`",
+        f"- Context: `{handoff.get('context_md_path')}`",
+        f"- Sources: `{handoff.get('sources_jsonl_path')}`",
+        f"- Manifest: `{handoff.get('manifest_json_path')}`",
+        f"- Resolution plan: `{handoff.get('resolution_plan_json_path')}`",
+        "",
+        "## Rules For The Agent",
+        "",
+    ]
+    lines.extend(f"- {item}" for item in handoff["instructions"])
+    lines.extend(
+        [
+            "",
+            "## Adapter Targets",
+            "",
+        ]
+    )
+    lines.extend(f"- `{target}`" for target in handoff["adapter_targets"])
+    lines.extend(
+        [
+            "",
+            "## Commands",
+            "",
+            "```bash",
+        ]
+    )
+    lines.extend(str(command) for command in handoff["commands"].values())
+    lines.extend(
+        [
+            "```",
+            "",
+            "## Next Step",
+            "",
+            "Give the approved `model_input.md` to the model, then record the answer with the `record_answer` command above.",
             "",
         ]
     )

@@ -11,7 +11,7 @@ from urllib.parse import parse_qs
 from .answer_review import run_answer_review
 from .context_review import run_context_review
 from .execution_review import run_execution_review
-from .runtime_vm import inspect_runtime_session, run_runtime_vm_acceptance
+from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance
 
 
 RUNTIME_REVIEW_SERVER_VERSION = "0.1"
@@ -37,6 +37,8 @@ def handle_runtime_review_action(
         result = run_context_review(root, action="generate" if status == "awaiting_context_generation" else "regenerate", session_id=session_id, reason=reason, source_scope="all", limit=8, mode="fast")
     elif action in {"approve_context", "reject_context"} and status == "awaiting_context_review":
         result = run_context_review(root, action="approve" if action == "approve_context" else "reject", session_id=session_id, reason=reason)
+    elif action == "export_handoff" and status == "ready_for_agent_handoff":
+        result = export_runtime_handoff(root, session_id)
     elif action == "prepare_answer" and status == "ready_for_answer_prepare":
         result = run_answer_review(root, action="prepare", session_id=session_id, reason=reason)
     elif action in {"record_answer", "record_revised_answer"} and status in {"awaiting_answer_output", "answer_rejected"}:
@@ -144,6 +146,8 @@ def render_action_controls(status: str) -> str:
         return action_form("generate_context", "Generate Context", reason=True)
     if status == "awaiting_context_review":
         return action_form("approve_context", "Approve Context", reason=True) + action_form("reject_context", "Reject Context", reason=True, secondary=True)
+    if status == "ready_for_agent_handoff":
+        return action_form("export_handoff", "Export Agent Handoff", reason=True)
     if status == "ready_for_answer_prepare":
         return action_form("prepare_answer", "Prepare Answer Packet", reason=True)
     if status in {"awaiting_answer_output", "answer_rejected"}:

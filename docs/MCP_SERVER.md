@@ -37,11 +37,14 @@ doctor_session(session_id)
 doctor_runtime_acceptance(session_id)
   Write reports/runtime-vm-acceptance-*.json/.md for one runtime session.
 
+doctor_runtime_handoff(session_id)
+  Export the approved model_input.md as an agent_handoff.md/json packet for Codex++, Warp, or Doctor.
+
 doctor_context_review(action="generate", session_id=null, refined_prompt_path=null, reason="", source_scope="all", limit=12, mode="fast")
   Generate, regenerate, approve, or reject the reviewable model_input.md payload.
 
 doctor_answer_review(action="prepare", session_id="", answer_text="", answer_file=null, reason="")
-  Prepare, record, approve, or reject the answer packet after context approval.
+  Prepare, record, approve, or reject the answer packet after context approval and runtime handoff export.
 
 doctor_execution_review(action="prepare", session_id="", command="", cwd=null, timeout_seconds=120, artifact_file=null, reason="")
   Prepare, run, record, approve, or reject local execution artifacts after answer approval.

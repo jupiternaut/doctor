@@ -210,8 +210,19 @@ Approve/reject events append to `feedback/context_review_feedback.jsonl`.
 `regenerate` reruns `codex-preflight` from the same `refined_prompt.md` after
 changing scope, mode, or limit.
 
+Export the approved context for Codex++, Warp, or Doctor:
+
+```bash
+agent-context runtime-handoff \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id>
+```
+
+It writes `runtime/sessions/<session-id>/agent_handoff.md` and
+`runtime/sessions/<session-id>/agent_handoff.json`.
+
 Stage 3 prepares and reviews the actual answer. It refuses to run until
-`context_review.json` is approved:
+`context_review.json` is approved and `agent_handoff.md` exists:
 
 ```bash
 agent-context answer-review \
@@ -228,7 +239,8 @@ runtime/sessions/<session-id>/answer_packet.md
 runtime/sessions/<session-id>/answer_review_events.jsonl
 ```
 
-`answer_packet.md` is the approved context handoff for Codex++, Warp, or Doctor.
+`answer_packet.md` is the answer-stage packet. The approved context bridge is
+`agent_handoff.md`.
 After an agent produces an answer, record and review it:
 
 ```bash
@@ -525,7 +537,7 @@ uv run agent-context mcp --out /Users/gengrf/agent-context-system
 The MCP server exposes local tools for `resolve_context`, `search_context`,
 `index_context`, `refresh_providers`, `index_projects`,
 `doctor_run`, `doctor_session`, `doctor_runtime_acceptance`,
-`doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,
+`doctor_runtime_handoff`, `doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,
 `codebase_memory_index`, `codebase_memory_search`, `index_sessions`, `build_hot_pack`, `read_source`,
 `context_panel`, `record_feedback`, `record_panel_feedback`,
 `resolve_alternative_context`,

@@ -320,6 +320,7 @@ def render_panel_html(status: dict[str, Any], status_path: Path) -> str:
         ("Runtime VM Ready", (status.get("runtime_vm") or {}).get("ready", "")),
         ("Runtime VM Session", (status.get("runtime_vm") or {}).get("session_id") or ""),
         ("Runtime VM Review File", (status.get("runtime_vm") or {}).get("review_file") or ""),
+        ("Runtime VM Agent Handoff", (status.get("runtime_vm") or {}).get("agent_handoff_md_path") or ""),
         ("Runtime VM Report", (status.get("runtime_vm") or {}).get("latest_md_path") or ""),
         (
             "Runtime VM Next Commands",
@@ -500,6 +501,7 @@ def latest_runtime_vm_acceptance(out_root: Path) -> dict[str, Any]:
         }
     session = data.get("session") if isinstance(data.get("session"), dict) else {}
     next_state = session.get("next") if isinstance(session.get("next"), dict) else {}
+    files = session.get("files") if isinstance(session.get("files"), dict) else {}
     checks = data.get("checks") if isinstance(data.get("checks"), list) else []
     missing_required = [
         check.get("id")
@@ -514,6 +516,7 @@ def latest_runtime_vm_acceptance(out_root: Path) -> dict[str, Any]:
         "ready": data.get("ready") is True,
         "session_id": data.get("session_id", ""),
         "review_file": next_state.get("review_file", ""),
+        "agent_handoff_md_path": files.get("agent_handoff_md_path", ""),
         "next_message": next_state.get("message", ""),
         "next_commands": next_state.get("commands") if isinstance(next_state.get("commands"), list) else [],
         "missing_required": missing_required,

@@ -54,7 +54,7 @@ from .retrieval_eval import run_retrieval_eval
 from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_health import run_runtime_health, run_semantic_readiness
-from .runtime_vm import inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
+from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status as read_semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
 from .session_index import build_session_index, session_index_path_for
@@ -167,6 +167,16 @@ def mcp_doctor_runtime_acceptance(session_id: str, out_root: str | None = None) 
         }
     except FileNotFoundError as exc:
         return runtime_mcp_error("runtime_acceptance", "verify", session_id, exc)
+
+
+def mcp_doctor_runtime_handoff(session_id: str, out_root: str | None = None) -> dict[str, Any]:
+    try:
+        return {
+            "mcp_version": MCP_VERSION,
+            **export_runtime_handoff(resolve_out_root(out_root), session_id),
+        }
+    except (FileNotFoundError, ValueError) as exc:
+        return runtime_mcp_error("runtime_handoff", "export", session_id, exc)
 
 
 def mcp_doctor_context_review(
@@ -1349,6 +1359,11 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
     def doctor_runtime_acceptance(session_id: str) -> dict[str, Any]:
         """Write a Doctor runtime VM acceptance handoff report."""
         return mcp_doctor_runtime_acceptance(session_id=session_id, out_root=str(root))
+
+    @server.tool()
+    def doctor_runtime_handoff(session_id: str) -> dict[str, Any]:
+        """Export approved Doctor context for Codex++, Warp, or Doctor."""
+        return mcp_doctor_runtime_handoff(session_id=session_id, out_root=str(root))
 
     @server.tool()
     def doctor_context_review(
