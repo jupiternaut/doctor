@@ -32,6 +32,15 @@ doctor runtime-acceptance \
   --session-id doctor-demo
 ```
 
+Open a clickable localhost review page:
+
+```bash
+doctor runtime-review-server \
+  --out /Users/gengrf/agent-context-system \
+  --session-id doctor-demo \
+  --port 8765
+```
+
 The session entrypoint is:
 
 ```text
@@ -162,6 +171,27 @@ Codex++, Warp, or another shell can render this object without learning the
 internal session layout. A user can see the current review gate and then run the
 listed approve/reject command.
 
+## Clickable Review Server
+
+`runtime-review-server` binds to `127.0.0.1` by default and renders the current
+session gate in a browser. It shows:
+
+- current status
+- active review file preview
+- stage table
+- missing acceptance checks
+- approve/reject or prepare/record/run buttons for the current gate
+
+The server calls the same stage functions as the CLI:
+
+- `context-review` for context approve/reject
+- `answer-review` for answer prepare/record/approve/reject
+- `execution-review` for execution prepare/run/approve/reject
+
+It refreshes `DOCTOR_SESSION.md` and `runtime-vm-acceptance-latest.*` after each
+button press. The server does not expose arbitrary file reads; the preview is
+limited to files under the Doctor output root.
+
 ## Current Boundary
 
 Implemented:
@@ -173,10 +203,11 @@ Implemented:
 - MCP tools for all four review gates
 - acceptance handoff reports
 - `panel/status.json` runtime VM status for UI clients
+- localhost clickable review server for the current gate
 
 Still outside this shell:
 
 - real automatic model answering
 - default Codex++/Warp interception for every task
 - unified execution runtime beyond explicit reviewed commands
-- native clickable UI for approving each gate
+- embedded Codex++/Warp native UI for approving each gate

@@ -132,6 +132,11 @@ doctor session \
 doctor runtime-acceptance \
   --out /Users/gengrf/agent-context-system \
   --session-id <session-id>
+
+doctor runtime-review-server \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --port 8765
 ```
 
 It writes `runtime/sessions/<session-id>/DOCTOR_SESSION.md`,
@@ -140,6 +145,8 @@ current gate, the next review file, and the exact command that advances the
 runtime. `runtime-acceptance` writes a GitHub handoff report under
 `reports/runtime-vm-acceptance-*.md` plus latest copies. See
 [Doctor Runtime VM](docs/DOCTOR_RUNTIME_VM.md) for the directory contract.
+`runtime-review-server` starts a localhost review page with approve/reject
+buttons for the current gate.
 
 Stage 1 is a no-index clarification pass. It normalizes the user's natural
 language task into a reviewable prompt before Doctor is allowed to read local

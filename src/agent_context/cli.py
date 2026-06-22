@@ -47,6 +47,7 @@ from .retrieval_eval import run_retrieval_eval
 from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_health import run_runtime_health, run_semantic_readiness
+from .runtime_review_server import run_runtime_review_server
 from .runtime_vm import inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
@@ -121,6 +122,12 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_acceptance = subparsers.add_parser("runtime-acceptance", help="Write a Doctor runtime VM acceptance handoff report.")
     runtime_acceptance.add_argument("--session-id", required=True, help="Runtime session id to verify.")
     runtime_acceptance.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    runtime_review_server = subparsers.add_parser("runtime-review-server", help="Serve a local clickable Doctor runtime review UI.")
+    runtime_review_server.add_argument("--session-id", required=True, help="Runtime session id to review.")
+    runtime_review_server.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    runtime_review_server.add_argument("--host", default="127.0.0.1", help="Bind host. Defaults to localhost.")
+    runtime_review_server.add_argument("--port", type=int, default=8765, help="Bind port. Defaults to 8765.")
 
     resolve = subparsers.add_parser("resolve", help="Resolve a task goal into a hot context pack.")
     resolve.add_argument("--goal", required=True, help="Task goal to resolve into relevant local context.")
@@ -661,6 +668,8 @@ def main(argv: list[str] | None = None) -> int:
         result = inspect_runtime_session(out_root, args.session_id)
     elif args.command == "runtime-acceptance":
         result = run_runtime_vm_acceptance(out_root, args.session_id)
+    elif args.command == "runtime-review-server":
+        result = run_runtime_review_server(out_root, args.session_id, host=args.host, port=args.port)
     elif args.command == "resolve":
         result = resolve_context(out_root, args.goal, limit=args.limit, source_scope=args.source_scope)
     elif args.command == "lab":
