@@ -13,6 +13,7 @@ manifests/
 packs/
 providers/codebase_memory/
 queries/
+runtime/
 reports/*
 !reports/.gitkeep
 !reports/github_reuse_report.md

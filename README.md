@@ -114,6 +114,30 @@ The Lab accepts task text plus `/image <path>` attachments, generates a resolver
 context pack, shows top sources, and records `/good <n>` or `/bad <n>` feedback
 into the existing feedback model.
 
+## Four-Stage Runtime
+
+Stage 1 is a no-index clarification pass. It normalizes the user's natural
+language task into a reviewable prompt before Doctor is allowed to read local
+indexes or provider manifests:
+
+```bash
+agent-context clarify \
+  --out /Users/gengrf/agent-context-system \
+  --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历"
+```
+
+It writes:
+
+```text
+runtime/sessions/<session-id>/clarify.json
+runtime/sessions/<session-id>/refined_prompt.md
+```
+
+`clarify` records `doctor_access=false`, `resolver_called=false`, and
+`index_access=false`. After the user accepts `refined_prompt.md`, pass that
+prompt to `codex-preflight`; that second stage generates the reviewable
+`model_input.md` context payload.
+
 ## Fixture Validation
 
 ```bash

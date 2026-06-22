@@ -8,6 +8,7 @@ from .access_policy import load_access_policy, read_access_audit, update_access_
 from .acceptance import run_v1_acceptance, run_v1_followup, run_v1_refresh, run_v1_stage_status
 from .alternatives import resolve_alternative_context
 from .arena import build_arena, record_feedback
+from .clarify import build_clarification
 from .codex_hook import build_codex_preflight
 from .codebase_memory import build_codebase_memory_index, search_codebase_memory
 from .cold_index import build_cold_index, query_cold_index
@@ -96,6 +97,12 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_search.add_argument("--query", required=True, help="Natural-language or keyword query.")
     evidence_search.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     evidence_search.add_argument("--limit", type=int, default=12, help="Maximum evidence records to return.")
+
+    clarify = subparsers.add_parser("clarify", help="Normalize a user task without reading Doctor indexes.")
+    clarify.add_argument("--goal", required=True, help="Original user task to normalize for review.")
+    clarify.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    clarify.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
+    clarify.add_argument("--mode", choices=["fast", "standard"], default="standard", help="Clarification mode metadata.")
 
     resolve = subparsers.add_parser("resolve", help="Resolve a task goal into a hot context pack.")
     resolve.add_argument("--goal", required=True, help="Task goal to resolve into relevant local context.")
@@ -595,6 +602,8 @@ def main(argv: list[str] | None = None) -> int:
         result = build_evidence_index(out_root)
     elif args.command == "evidence-search":
         result = search_evidence_index(out_root, args.query, limit=max(1, args.limit))
+    elif args.command == "clarify":
+        result = build_clarification(out_root, args.goal, session_id=args.session_id, mode=args.mode)
     elif args.command == "resolve":
         result = resolve_context(out_root, args.goal, limit=args.limit, source_scope=args.source_scope)
     elif args.command == "lab":
