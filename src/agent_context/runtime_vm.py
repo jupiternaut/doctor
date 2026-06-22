@@ -554,6 +554,8 @@ def runtime_file_contract(root: Path, session_id: str, stages: list[dict[str, An
         "doctor_session_md_path": str(session_dir / "DOCTOR_SESSION.md"),
         "runtime_session_json_path": str(session_dir / "runtime_session.json"),
         "runtime_session_md_path": str(session_dir / "runtime_session.md"),
+        "runtime_task_json_path": str(session_dir / "runtime_task.json"),
+        "runtime_task_md_path": str(session_dir / "runtime_task.md"),
         "clarify_json_path": str(session_dir / "clarify.json"),
         "refined_prompt_md_path": str(session_dir / "refined_prompt.md"),
         "context_review_json_path": str(session_dir / "context_review.json"),

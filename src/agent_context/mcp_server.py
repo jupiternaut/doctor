@@ -57,6 +57,7 @@ from .route_selector import write_route_selector_model
 from .runtime_adapters import export_runtime_adapter_package
 from .runtime_health import run_runtime_health, run_semantic_readiness
 from .runtime_review_client import export_runtime_review_client, export_runtime_review_launch
+from .runtime_task import start_runtime_task
 from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status as read_semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
@@ -153,6 +154,28 @@ def mcp_doctor_run(
         "mcp_version": MCP_VERSION,
         **start_runtime_session(resolve_out_root(out_root), goal, session_id=session_id, mode=mode),
     }
+
+
+def mcp_doctor_runtime_task(
+    goal: str,
+    session_id: str | None = None,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    out_root: str | None = None,
+) -> dict[str, Any]:
+    try:
+        return {
+            "mcp_version": MCP_VERSION,
+            **start_runtime_task(
+                resolve_out_root(out_root),
+                goal,
+                session_id=session_id,
+                host=host,
+                port=max(1, port),
+            ),
+        }
+    except (FileNotFoundError, ValueError) as exc:
+        return runtime_mcp_error("runtime_task", "clarify", session_id, exc)
 
 
 def mcp_doctor_agent_preflight(
@@ -1434,8 +1457,9 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
         "agent-context",
         instructions=(
             "Search and build local agent context packs from an agent-context-system "
-            "workspace. Use resolve_context first for task goals; use search_context "
-            "for exact queries or fallback, then read_source for specific evidence."
+            "workspace. Use doctor_runtime_task first for user-facing agent tasks that "
+            "need review gates. Use resolve_context for approved direct retrieval, "
+            "search_context for exact queries or fallback, then read_source for specific evidence."
         ),
     )
 
@@ -1448,6 +1472,22 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
     def doctor_run(goal: str, session_id: str | None = None, mode: str = "standard") -> dict[str, Any]:
         """Start a Doctor runtime session with no-index clarification."""
         return mcp_doctor_run(goal=goal, session_id=session_id, mode=mode, out_root=str(root))
+
+    @server.tool()
+    def doctor_runtime_task(
+        goal: str,
+        session_id: str | None = None,
+        host: str = "127.0.0.1",
+        port: int = 8765,
+    ) -> dict[str, Any]:
+        """Start a one-shot Doctor task review session and export the review launch contract."""
+        return mcp_doctor_runtime_task(
+            goal=goal,
+            session_id=session_id,
+            host=host,
+            port=port,
+            out_root=str(root),
+        )
 
     @server.tool()
     def doctor_agent_preflight(

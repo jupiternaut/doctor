@@ -179,6 +179,23 @@ doctor runtime-review-launch \
   --port 8765
 ```
 
+For the default product flow, start with a one-shot task entrypoint. It creates
+the no-index clarification session, writes `agent_preflight.md/json`, exports the
+review client, and writes the launch contract in one call:
+
+```bash
+doctor runtime-task \
+  --out /Users/gengrf/agent-context-system \
+  --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历" \
+  --session-id <session-id> \
+  --port 8765
+```
+
+This first step does not call the resolver and does not create `packs/` or
+`indexes/`. It only prepares `refined_prompt.md` plus the local review surface
+so the user can approve the normalized prompt before Doctor reads local
+sources.
+
 For Codex++, Warp, Codex CLI, or an MCP client, prefer the unified preflight
 entrypoint. It returns `agent_preflight.md/json`, which tells the client which
 file must be shown to the user before context is sent to a model:
@@ -584,8 +601,11 @@ packs/<task-id>-resolve-<timestamp>/codex_preflight.md
 packs/<task-id>-resolve-<timestamp>/model_input.md
 ```
 
-`agent-preflight` is the default decoupled entry point for Codex++ or another
-wrapper. It preserves the review gates and writes `agent_preflight.md/json`.
+`runtime-task` is the default one-call entry point for Codex++ or another
+wrapper. It preserves the first no-index review gate and writes
+`runtime_task.md/json`, `agent_preflight.md/json`, and the review launch
+contract. `agent-preflight` remains the lower-level gate advancer after the user
+accepts or rejects each review file.
 The older `codex-preflight` remains the lower-level context generator used
 inside Stage 2; wrappers should not call it as the first default task hook
 because it skips the no-index clarify review.
@@ -630,7 +650,7 @@ uv run agent-context mcp --out /Users/gengrf/agent-context-system
 
 The MCP server exposes local tools for `resolve_context`, `search_context`,
 `index_context`, `refresh_providers`, `index_projects`,
-`doctor_run`, `doctor_agent_preflight`, `doctor_session`, `doctor_runtime_acceptance`,
+`doctor_run`, `doctor_runtime_task`, `doctor_agent_preflight`, `doctor_session`, `doctor_runtime_acceptance`,
 `doctor_runtime_handoff`, `doctor_runtime_adapter`, `doctor_runtime_review_client`,
 `doctor_runtime_review_launch`,
 `doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,

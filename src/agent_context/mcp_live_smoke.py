@@ -18,6 +18,7 @@ REQUIRED_TOOLS = [
     "resolve_context",
     "read_source",
     "doctor_run",
+    "doctor_runtime_task",
     "doctor_agent_preflight",
     "doctor_session",
     "doctor_runtime_acceptance",

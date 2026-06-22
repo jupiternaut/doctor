@@ -51,6 +51,7 @@ from .runtime_health import run_runtime_health, run_semantic_readiness
 from .runtime_adapters import export_runtime_adapter_package
 from .runtime_review_client import export_runtime_review_client, export_runtime_review_launch
 from .runtime_review_server import run_runtime_review_server
+from .runtime_task import start_runtime_task
 from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
@@ -117,6 +118,13 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_run.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     doctor_run.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
     doctor_run.add_argument("--mode", choices=["fast", "standard"], default="standard", help="Clarification mode metadata.")
+
+    runtime_task = subparsers.add_parser("runtime-task", help="Start a one-shot Doctor task review session and export the review launch contract.")
+    runtime_task.add_argument("--goal", required=True, help="Original user task to normalize for review.")
+    runtime_task.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    runtime_task.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
+    runtime_task.add_argument("--host", default="127.0.0.1", help="Review server host for the launch contract.")
+    runtime_task.add_argument("--port", type=int, default=8765, help="Review server port for the launch contract.")
 
     agent_preflight = subparsers.add_parser("agent-preflight", help="Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, or MCP clients.")
     agent_preflight.add_argument("--advance", choices=["clarify", "context", "handoff"], default="clarify", help="Runtime gate to advance: clarify, context, or handoff.")
@@ -708,6 +716,30 @@ def main(argv: list[str] | None = None) -> int:
         result = build_clarification(out_root, args.goal, session_id=args.session_id, mode=args.mode)
     elif args.command == "run":
         result = start_runtime_session(out_root, args.goal, session_id=args.session_id, mode=args.mode)
+    elif args.command == "runtime-task":
+        try:
+            result = start_runtime_task(
+                out_root,
+                args.goal,
+                session_id=args.session_id,
+                host=args.host,
+                port=args.port,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "command": "runtime-task",
+                        "session_id": args.session_id,
+                        "error": str(exc),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 1
     elif args.command == "agent-preflight":
         try:
             result = run_agent_preflight(

@@ -16,9 +16,35 @@ doctor run \
   --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历"
 ```
 
+The default wrapper entrypoint is `runtime-task`. It starts the no-index
+clarification session and exports the review client launch contract in one call:
+
+```bash
+doctor runtime-task \
+  --out /Users/gengrf/agent-context-system \
+  --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历" \
+  --session-id doctor-demo \
+  --port 8765
+```
+
+It writes:
+
+```text
+runtime/sessions/<session-id>/runtime_task.md
+runtime/sessions/<session-id>/runtime_task.json
+runtime/sessions/<session-id>/agent_preflight.md
+runtime/sessions/<session-id>/agent_preflight.json
+runtime/sessions/<session-id>/review_client/review_launch.md
+runtime/sessions/<session-id>/review_client/doctor-runtime-review-client.html
+```
+
+This first entrypoint must not create `packs/` or `indexes/`; it only prepares
+the prompt review before Doctor reads local sources.
+
 For Codex++, Warp, Codex CLI, or MCP clients, use the unified preflight
-entrypoint. It returns `agent_preflight.md/json` and tells the client which file
-must be shown to the user before model input is allowed:
+entrypoint as the lower-level gate advancer. It returns `agent_preflight.md/json`
+and tells the client which file must be shown to the user before model input is
+allowed:
 
 ```bash
 doctor agent-preflight \
@@ -106,7 +132,7 @@ That file tells the user or an agent:
 
 ```text
 user task
-  -> doctor run / agent-preflight clarify
+  -> runtime-task / doctor run / agent-preflight clarify
   -> clarify/refine
   -> user reviews refined_prompt.md
   -> agent-preflight context / context-review generate
@@ -128,6 +154,8 @@ are activated.
 ```text
 runtime/sessions/<session-id>/
   DOCTOR_SESSION.md
+  runtime_task.md
+  runtime_task.json
   runtime_session.json
   runtime_session.md
   clarify.json
@@ -169,7 +197,8 @@ The runtime session stores pointers to those pack files instead of copying them.
 The MCP server exposes:
 
 - `doctor_run`: create a no-index runtime session
-- `doctor_agent_preflight`: default client entrypoint for clarify/context/handoff gates
+- `doctor_runtime_task`: default one-shot task entrypoint with no-index clarification and review launch export
+- `doctor_agent_preflight`: lower-level clarify/context/handoff gate advancer
 - `doctor_session`: inspect and refresh `DOCTOR_SESSION.md`
 - `doctor_runtime_acceptance`: write the session acceptance handoff
 - `doctor_runtime_handoff`: export approved `model_input.md` for Codex++, Warp, or Doctor
@@ -300,7 +329,8 @@ Implemented:
 - review-gated four-stage file contract
 - CLI alias through `doctor`
 - MCP tools for all four review gates
-- default `agent-preflight` CLI/MCP entrypoint for Codex++/Warp/Codex CLI/MCP clients
+- default `runtime-task` CLI/MCP entrypoint for Codex++/Warp/Codex CLI/MCP clients
+- lower-level `agent-preflight` CLI/MCP gate advancer
 - approved-context handoff export for Codex++/Warp/Doctor
 - runtime adapter package for Codex++/Warp/Codex CLI/MCP clients
 - embeddable runtime review client and API contract for native panels

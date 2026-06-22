@@ -118,9 +118,10 @@ uv run ./doctor v1-refresh \
 - Doctor now has a stable `doctor run` four-stage runtime shell with no-index
   clarification, reviewable context generation, answer review, and execution
   review.
-- Doctor now has a default `agent-preflight` CLI/MCP entrypoint so Codex++,
-  Warp, Codex CLI, or MCP clients can advance clarify/context/handoff gates
-  without embedding resolver logic.
+- Doctor now has a default `runtime-task` CLI/MCP entrypoint so Codex++,
+  Warp, Codex CLI, or MCP clients can start a no-index prompt review and export
+  the review launch contract with one call. `agent-preflight` remains the
+  lower-level clarify/context/handoff gate advancer.
 - Doctor can export a runtime adapter package for Codex++, Warp, Codex CLI, and
   MCP clients under `runtime/sessions/<session-id>/adapters/`.
 - Doctor's review server now exposes `GET /api/session` and `POST /api/action`

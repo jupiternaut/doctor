@@ -119,6 +119,7 @@ def normalize_targets(targets: list[str] | None) -> list[str]:
 def adapter_entrypoints(root: Path, session_id: str, *, agent_command: str, review_port: int) -> dict[str, str]:
     return {
         "inspect": doctor_command(root, "session", "--session-id", session_id),
+        "runtime_task": doctor_command(root, "runtime-task", "--session-id", session_id, "--goal", quote_arg("<user task>"), "--port", str(int(review_port))),
         "agent_preflight_clarify": doctor_command(root, "agent-preflight", "--session-id", session_id, "--advance", "clarify", "--goal", quote_arg("<user task>")),
         "agent_preflight_context": doctor_command(root, "agent-preflight", "--session-id", session_id, "--advance", "context", "--source-scope", "all", "--limit", "8"),
         "agent_preflight_handoff": doctor_command(root, "agent-preflight", "--session-id", session_id, "--advance", "handoff", "--agent-command", quote_arg(agent_command)),
@@ -138,7 +139,7 @@ def adapter_entrypoints(root: Path, session_id: str, *, agent_command: str, revi
 
 def mcp_tool_sequence(session_id: str, *, agent_command: str) -> list[dict[str, Any]]:
     return [
-        {"tool": "doctor_agent_preflight", "arguments": {"session_id": session_id, "advance": "clarify", "goal": "<user task>"}},
+        {"tool": "doctor_runtime_task", "arguments": {"session_id": session_id, "goal": "<user task>"}},
         {"tool": "doctor_agent_preflight", "arguments": {"session_id": session_id, "advance": "context", "source_scope": "all", "limit": 8}},
         {"tool": "doctor_runtime_review_client", "arguments": {"session_id": session_id}},
         {"tool": "doctor_runtime_review_launch", "arguments": {"session_id": session_id}},
@@ -208,7 +209,8 @@ def render_target_doc(manifest: dict[str, Any], target: str) -> str:
         "## Required Behavior",
         "",
         "- Show the current review file to the user before advancing a gate.",
-        "- Prefer `doctor agent-preflight` / `doctor_agent_preflight` as the default entrypoint instead of calling low-level resolver tools directly.",
+        "- Prefer `doctor runtime-task` / `doctor_runtime_task` as the first task entrypoint instead of calling low-level resolver tools directly.",
+        "- Use `doctor agent-preflight` / `doctor_agent_preflight` only to advance an existing clarify/context/handoff gate.",
         "- For native UI panels, poll `GET /api/session` on the review server and submit gate actions with `POST /api/action` JSON.",
         "- Use `agent_handoff.md` / `model_input.md` as the only approved local context payload.",
         "- Use the answer command adapter or record an answer file before execution.",

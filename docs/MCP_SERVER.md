@@ -31,6 +31,11 @@ doctor_run(goal, session_id=null, mode="standard")
   Start a Doctor runtime session with no-index clarification. This creates
   runtime/sessions/<session-id>/DOCTOR_SESSION.md and does not call the resolver.
 
+doctor_runtime_task(goal, session_id=null, host="127.0.0.1", port=8765)
+  Start the default one-shot Doctor task review session. This creates the
+  no-index clarification gate, writes runtime_task.md/json and
+  agent_preflight.md/json, and exports the runtime review launch contract.
+
 doctor_agent_preflight(advance="clarify", goal=null, session_id=null, source_scope="all", limit=8, mode="fast", agent_command="<agent command>", review_port=8765)
   Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, and MCP clients. Use advance=clarify for the first no-index user prompt review, advance=context after the refined prompt is accepted, and advance=handoff after model_input.md is approved.
 
@@ -192,12 +197,11 @@ and query-family scoped priors; `resolution_plan.json` records the active
 parts in `resolver_score_parts`.
 
 For Codex++ or another wrapper that wants a default preflight before each task,
-use the runtime preflight entry point instead of embedding resolver logic in the UI:
+use the one-shot runtime task entry point instead of embedding resolver logic in the UI:
 
 ```bash
-agent-context agent-preflight \
+agent-context runtime-task \
   --out /Users/gengrf/agent-context-system \
-  --advance clarify \
   --goal "告诉我本地所有项目里如何构建个人推荐系统" \
   --session-id <session-id>
 ```
