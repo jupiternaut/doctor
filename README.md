@@ -158,6 +158,18 @@ acceptance gaps, and allowed actions. `/api/action` accepts JSON like
 `{"action":"approve_context","reason":"context matches intent"}` and returns
 the refreshed session payload.
 
+To export a small embeddable client for Codex++/Warp webviews or a local browser:
+
+```bash
+doctor runtime-review-client \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --review-server-url http://127.0.0.1:8765/
+```
+
+It writes `runtime/sessions/<session-id>/review_client/` with a self-contained
+HTML client, a JavaScript API helper, and `runtime-review-api-contract.json`.
+
 For Codex++, Warp, Codex CLI, or an MCP client, prefer the unified preflight
 entrypoint. It returns `agent_preflight.md/json`, which tells the client which
 file must be shown to the user before context is sent to a model:
@@ -610,7 +622,7 @@ uv run agent-context mcp --out /Users/gengrf/agent-context-system
 The MCP server exposes local tools for `resolve_context`, `search_context`,
 `index_context`, `refresh_providers`, `index_projects`,
 `doctor_run`, `doctor_agent_preflight`, `doctor_session`, `doctor_runtime_acceptance`,
-`doctor_runtime_handoff`, `doctor_runtime_adapter`,
+`doctor_runtime_handoff`, `doctor_runtime_adapter`, `doctor_runtime_review_client`,
 `doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,
 `codebase_memory_index`, `codebase_memory_search`, `index_sessions`, `build_hot_pack`, `read_source`,
 `context_panel`, `record_feedback`, `record_panel_feedback`,

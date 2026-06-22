@@ -70,6 +70,15 @@ doctor runtime-review-server \
   --port 8765
 ```
 
+Export an embeddable review client for Codex++/Warp webviews or a local browser:
+
+```bash
+doctor runtime-review-client \
+  --out /Users/gengrf/agent-context-system \
+  --session-id doctor-demo \
+  --review-server-url http://127.0.0.1:8765/
+```
+
 The session entrypoint is:
 
 ```text
@@ -120,6 +129,7 @@ runtime/sessions/<session-id>/
   agent_handoff.json
   agent_handoff.md
   adapters/
+  review_client/
   answer_review.json
   answer_packet.md
   answer.md
@@ -155,6 +165,7 @@ The MCP server exposes:
 - `doctor_runtime_acceptance`: write the session acceptance handoff
 - `doctor_runtime_handoff`: export approved `model_input.md` for Codex++, Warp, or Doctor
 - `doctor_runtime_adapter`: export adapter files for Codex++, Warp, Codex CLI, and MCP clients
+- `doctor_runtime_review_client`: export an embeddable HTML/JS review client and API contract
 - `doctor_context_review`: generate, regenerate, approve, or reject `model_input.md`
 - `doctor_answer_review`: prepare, run, record, approve, or reject the answer packet
 - `doctor_execution_review`: prepare, run, record, approve, or reject local artifacts
@@ -244,6 +255,19 @@ HTML form, such as:
 {"action":"approve_context","reason":"context matches intent"}
 ```
 
+`runtime-review-client` writes a small client under
+`runtime/sessions/<session-id>/review_client/`:
+
+```text
+review_client_manifest.json
+doctor-runtime-review-client.html
+doctor-runtime-review-client.js
+runtime-review-api-contract.json
+```
+
+Codex++ or Warp can embed that HTML file, reuse the JavaScript helper, or ignore
+the UI and implement a native panel directly from `runtime-review-api-contract.json`.
+
 The server calls the same stage functions as the CLI:
 
 - `context-review` for context approve/reject
@@ -267,6 +291,7 @@ Implemented:
 - default `agent-preflight` CLI/MCP entrypoint for Codex++/Warp/Codex CLI/MCP clients
 - approved-context handoff export for Codex++/Warp/Doctor
 - runtime adapter package for Codex++/Warp/Codex CLI/MCP clients
+- embeddable runtime review client and API contract for native panels
 - answer-stage command adapter that feeds `answer_packet.md` to local agents on stdin
 - acceptance handoff reports
 - `panel/status.json` runtime VM status for UI clients

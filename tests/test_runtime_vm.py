@@ -447,6 +447,10 @@ def test_runtime_review_http_server_handles_clickable_context_approval(tmp_path:
         assert api_session["runtime_session"]["status"] == "awaiting_context_review"
         assert "HTTP preview." in api_session["review_preview"]
         assert [action["action"] for action in api_session["allowed_actions"]] == ["approve_context", "reject_context"]
+        options_request = urllib.request.Request(f"{base_url}/api/action", method="OPTIONS")
+        options_response = urllib.request.urlopen(options_request, timeout=5)
+        assert options_response.status == 204
+        assert options_response.headers["Access-Control-Allow-Origin"] == "*"
 
         data = json.dumps({"action": "approve_context", "reason": "context ok"}).encode("utf-8")
         request = urllib.request.Request(f"{base_url}/api/action", data=data, headers={"Content-Type": "application/json"}, method="POST")

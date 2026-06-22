@@ -56,6 +56,7 @@ from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_adapters import export_runtime_adapter_package
 from .runtime_health import run_runtime_health, run_semantic_readiness
+from .runtime_review_client import export_runtime_review_client
 from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status as read_semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
@@ -231,6 +232,24 @@ def mcp_doctor_runtime_adapter(
         }
     except (FileNotFoundError, ValueError) as exc:
         return runtime_mcp_error("runtime_adapter", "export", session_id, exc)
+
+
+def mcp_doctor_runtime_review_client(
+    session_id: str,
+    review_server_url: str = "http://127.0.0.1:8765/",
+    out_root: str | None = None,
+) -> dict[str, Any]:
+    try:
+        return {
+            "mcp_version": MCP_VERSION,
+            **export_runtime_review_client(
+                resolve_out_root(out_root),
+                session_id,
+                review_server_url=review_server_url,
+            ),
+        }
+    except FileNotFoundError as exc:
+        return runtime_mcp_error("runtime_review_client", "export", session_id, exc)
 
 
 def mcp_doctor_context_review(
@@ -1462,6 +1481,18 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
             targets=targets,
             agent_command=agent_command,
             review_port=review_port,
+            out_root=str(root),
+        )
+
+    @server.tool()
+    def doctor_runtime_review_client(
+        session_id: str,
+        review_server_url: str = "http://127.0.0.1:8765/",
+    ) -> dict[str, Any]:
+        """Export embeddable review client files for Codex++, Warp, Codex CLI, and MCP clients."""
+        return mcp_doctor_runtime_review_client(
+            session_id=session_id,
+            review_server_url=review_server_url,
             out_root=str(root),
         )
 

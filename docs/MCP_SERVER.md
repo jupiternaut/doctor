@@ -46,6 +46,9 @@ doctor_runtime_handoff(session_id)
 doctor_runtime_adapter(session_id, targets=null, agent_command="<agent command>", review_port=8765)
   Export adapter files for Codex++, Warp, Codex CLI, and MCP clients. The package includes adapter_manifest.json, target-specific Markdown, shell environment helpers, and an MCP tool sequence.
 
+doctor_runtime_review_client(session_id, review_server_url="http://127.0.0.1:8765/")
+  Export an embeddable HTML/JS review client plus runtime-review-api-contract.json for Codex++, Warp, Codex CLI, or MCP clients.
+
 doctor_context_review(action="generate", session_id=null, refined_prompt_path=null, reason="", source_scope="all", limit=12, mode="fast")
   Generate, regenerate, approve, or reject the reviewable model_input.md payload.
 

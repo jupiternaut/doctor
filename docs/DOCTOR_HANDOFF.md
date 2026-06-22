@@ -125,6 +125,8 @@ uv run ./doctor v1-refresh \
   MCP clients under `runtime/sessions/<session-id>/adapters/`.
 - Doctor's review server now exposes `GET /api/session` and `POST /api/action`
   for native Codex++/Warp panels, in addition to the local HTML review page.
+- Doctor can export an embeddable `review_client/` HTML/JS client and API
+  contract for Codex++/Warp native panels or webviews.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
 

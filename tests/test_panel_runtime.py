@@ -384,6 +384,9 @@ def test_context_panel_reads_latest_runtime_vm_acceptance(tmp_path: Path) -> Non
                         "runtime_adapter_manifest_json_path": str(
                             out / "runtime" / "sessions" / "doctor-panel-session" / "adapters" / "adapter_manifest.json"
                         ),
+                        "runtime_review_client_html_path": str(
+                            out / "runtime" / "sessions" / "doctor-panel-session" / "review_client" / "doctor-runtime-review-client.html"
+                        ),
                         "execution_artifact_index_md_path": str(
                             out / "runtime" / "sessions" / "doctor-panel-session" / "execution_artifacts.md"
                         ),
@@ -425,6 +428,7 @@ def test_context_panel_reads_latest_runtime_vm_acceptance(tmp_path: Path) -> Non
     assert runtime_vm["session_id"] == "doctor-panel-session"
     assert runtime_vm["review_file"].endswith("model_input.md")
     assert runtime_vm["runtime_adapter_manifest_json_path"].endswith("adapter_manifest.json")
+    assert runtime_vm["runtime_review_client_html_path"].endswith("doctor-runtime-review-client.html")
     assert runtime_vm["execution_artifact_index_md_path"].endswith("execution_artifacts.md")
     assert runtime_vm["missing_required"] == ["context_approved"]
     assert len(runtime_vm["next_commands"]) == 2

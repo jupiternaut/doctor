@@ -350,6 +350,12 @@ class RuntimeReviewRequestHandler(BaseHTTPRequestHandler):
     out_root: Path
     session_id: str
 
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_cors_headers()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:
         if self.path == "/api/session":
             self.respond_json(runtime_review_api_payload(self.out_root, self.session_id))
@@ -420,10 +426,16 @@ class RuntimeReviewRequestHandler(BaseHTTPRequestHandler):
     def respond_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         encoded = (json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
         self.send_response(status)
+        self.send_cors_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)
+
+    def send_cors_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def log_message(self, format: str, *args: Any) -> None:
         return
