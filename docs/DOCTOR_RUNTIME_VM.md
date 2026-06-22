@@ -42,8 +42,8 @@ This first entrypoint must not create `packs/` or `indexes/`; it only prepares
 the prompt review before Doctor reads local sources.
 
 For Codex++, Warp, Codex CLI, or MCP clients, use the unified preflight
-entrypoint as the lower-level gate advancer. It returns `agent_preflight.md/json`
-and tells the client which file must be shown to the user before model input is
+entrypoint as the gate advancer. It returns `agent_preflight.md/json` and tells
+the client which file must be shown to the user before the next stage is
 allowed:
 
 ```bash
@@ -52,6 +52,19 @@ doctor agent-preflight \
   --advance clarify \
   --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历" \
   --session-id doctor-demo
+
+doctor agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --advance answer \
+  --session-id doctor-demo \
+  --answer-command "<agent command>"
+
+doctor agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --advance execution \
+  --session-id doctor-demo \
+  --execution-command "python scripts/build_report.py" \
+  --cwd /Users/gengrf/agent-context-system
 ```
 
 Inspect the session at any time:
@@ -139,9 +152,9 @@ user task
   -> user reviews model_input.md
   -> agent-preflight handoff / runtime-handoff exports approved model input
   -> runtime-adapter exports client adapter files
-  -> answer-review prepare/run/record
+  -> agent-preflight answer / answer-review prepare/run/record
   -> user reviews answer.md
-  -> execution-review prepare/run
+  -> agent-preflight execution / execution-review prepare/run
   -> user reviews artifacts
 ```
 
@@ -198,7 +211,7 @@ The MCP server exposes:
 
 - `doctor_run`: create a no-index runtime session
 - `doctor_runtime_task`: default one-shot task entrypoint with no-index clarification and review launch export
-- `doctor_agent_preflight`: lower-level clarify/context/handoff gate advancer
+- `doctor_agent_preflight`: unified clarify/context/handoff/answer/execution gate advancer
 - `doctor_session`: inspect and refresh `DOCTOR_SESSION.md`
 - `doctor_runtime_acceptance`: write the session acceptance handoff
 - `doctor_runtime_handoff`: export approved `model_input.md` for Codex++, Warp, or Doctor

@@ -1,6 +1,6 @@
 # Doctor Handoff
 
-Last updated: 2026-06-16 Asia/Shanghai
+Last updated: 2026-06-22 Asia/Shanghai
 
 ## Product Definition
 
@@ -120,8 +120,9 @@ uv run ./doctor v1-refresh \
   review.
 - Doctor now has a default `runtime-task` CLI/MCP entrypoint so Codex++,
   Warp, Codex CLI, or MCP clients can start a no-index prompt review and export
-  the review launch contract with one call. `agent-preflight` remains the
-  lower-level clarify/context/handoff gate advancer.
+  the review launch contract with one call. `agent-preflight` is now the
+  unified gate advancer for `clarify`, `context`, `handoff`, `answer`, and
+  `execution`, so wrappers can stay on one high-level interface.
 - Doctor can export a runtime adapter package for Codex++, Warp, Codex CLI, and
   MCP clients under `runtime/sessions/<session-id>/adapters/`.
 - Doctor's review server now exposes `GET /api/session` and `POST /api/action`
@@ -132,6 +133,12 @@ uv run ./doctor v1-refresh \
   URLs, generated client path, and exact start/open commands.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
+- A synthetic end-to-end runtime session
+  `session-agent-preflight-e2e-20260622` reached `complete` through
+  `runtime-task -> agent-preflight context -> context approval ->
+  agent-preflight answer -> answer approval -> agent-preflight execution ->
+  execution approval`; `runtime-acceptance` reported `ready=true` and 15/15
+  required checks ok.
 
 ## Known Gaps
 
