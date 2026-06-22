@@ -281,6 +281,8 @@ It writes:
 ```text
 runtime/sessions/<session-id>/execution_review.json
 runtime/sessions/<session-id>/execution_report.md
+runtime/sessions/<session-id>/execution_artifacts.jsonl
+runtime/sessions/<session-id>/execution_artifacts.md
 runtime/sessions/<session-id>/execution_review_events.jsonl
 runtime/sessions/<session-id>/artifacts/<run-id>.stdout.txt
 runtime/sessions/<session-id>/artifacts/<run-id>.stderr.txt
@@ -289,8 +291,8 @@ runtime/sessions/<session-id>/artifacts/<run-id>.json
 
 Approve/reject events append to `feedback/execution_review_feedback.jsonl`.
 Commands are explicit user-provided commands, parsed without shell expansion;
-stdout, stderr, return code, timeout status, and artifact paths are recorded for
-review.
+stdout, stderr, return code, timeout status, artifact paths, file sizes, and
+SHA-256 hashes are recorded for review.
 
 ## Fixture Validation
 

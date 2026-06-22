@@ -380,6 +380,11 @@ def test_context_panel_reads_latest_runtime_vm_acceptance(tmp_path: Path) -> Non
                 "session_id": "doctor-panel-session",
                 "latest_md_path": str(reports / "runtime-vm-acceptance-latest.md"),
                 "session": {
+                    "files": {
+                        "execution_artifact_index_md_path": str(
+                            out / "runtime" / "sessions" / "doctor-panel-session" / "execution_artifacts.md"
+                        ),
+                    },
                     "next": {
                         "review_file": str(out / "packs" / "task" / "model_input.md"),
                         "message": "Review model_input.md before any model or agent consumes it.",
@@ -416,6 +421,7 @@ def test_context_panel_reads_latest_runtime_vm_acceptance(tmp_path: Path) -> Non
     assert runtime_vm["ready"] is False
     assert runtime_vm["session_id"] == "doctor-panel-session"
     assert runtime_vm["review_file"].endswith("model_input.md")
+    assert runtime_vm["execution_artifact_index_md_path"].endswith("execution_artifacts.md")
     assert runtime_vm["missing_required"] == ["context_approved"]
     assert len(runtime_vm["next_commands"]) == 2
     assert "Runtime VM Status" in panel_html

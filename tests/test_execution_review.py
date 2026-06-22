@@ -75,6 +75,15 @@ def test_execution_review_runs_command_and_records_artifacts(tmp_path: Path) -> 
     report = Path(executed["execution_report_md_path"]).read_text(encoding="utf-8")
     assert "doctor artifact" not in report
     assert "Return code: `0`" in report
+    assert Path(executed["artifact_manifest_jsonl_path"]).exists()
+    assert Path(executed["artifact_index_md_path"]).exists()
+    manifest = read_jsonl(Path(executed["artifact_manifest_jsonl_path"]))
+    assert [record["role"] for record in manifest] == ["stdout", "stderr", "result_json"]
+    assert all(len(record["sha256"]) == 64 for record in manifest)
+    assert any(record["path"] == latest["stdout_path"] for record in manifest)
+    artifact_index = Path(executed["artifact_index_md_path"]).read_text(encoding="utf-8")
+    assert "Doctor Execution Artifacts" in artifact_index
+    assert latest["run_id"] in artifact_index
 
     approved = run_execution_review(out, action="approve", session_id="session-execute", reason="artifact accepted")
     assert approved["status"] == "approved"
@@ -97,6 +106,11 @@ def test_execution_review_records_external_artifact(tmp_path: Path) -> None:
     assert recorded["status"] == "pending_review"
     assert recorded["external_artifacts"][0]["path"] == str(artifact.resolve())
     assert recorded["external_artifacts"][0]["size_bytes"] == len("external result")
+    manifest = read_jsonl(Path(recorded["artifact_manifest_jsonl_path"]))
+    assert len(manifest) == 1
+    assert manifest[0]["role"] == "external_artifact"
+    assert manifest[0]["path"] == str(artifact.resolve())
+    assert len(manifest[0]["sha256"]) == 64
 
 
 def test_execution_review_cli_reports_unapproved_answer_as_json_error(tmp_path: Path, capsys) -> None:

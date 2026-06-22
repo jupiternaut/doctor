@@ -115,10 +115,13 @@ uv run ./doctor v1-refresh \
 
 ## Known Gaps
 
-- Doctor does not yet have a stable `doctor run` four-stage product command.
-- Normalization is not yet separated from retrieval as a first-class phase.
-- Execution planning and local program execution are not yet review-gated
-  Doctor phases.
+- Doctor now has a stable `doctor run` four-stage runtime shell with no-index
+  clarification, reviewable context generation, answer review, and execution
+  review.
+- Stage 4 now writes a unified `execution_artifacts.jsonl` and
+  `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
+- Default Codex++/Warp interception for every task is still not wired as a
+  native runtime entrypoint.
 - User-facing UI is still weaker than OpenClaw, ChatGPT Projects, and Claude
   Code.
 - Metadata model is not yet as mature as DataHub or OpenMetadata.

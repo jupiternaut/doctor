@@ -247,6 +247,12 @@ def runtime_acceptance_checks(session: dict[str, Any]) -> list[dict[str, Any]]:
             required=True,
             evidence=execution.get("artifacts_dir") or execution["state_path"],
         ),
+        file_check(
+            "execution_artifact_manifest",
+            "Stage 4 indexed produced artifacts in a unified manifest",
+            files["execution_artifact_manifest_jsonl_path"],
+            required=True,
+        ),
         bool_check(
             "execution_approved",
             "Stage 4 execution output is approved",
@@ -328,6 +334,12 @@ def build_stage_states(root: Path, session_id: str) -> list[dict[str, Any]]:
             "state_path": str(session_dir / "execution_review.json"),
             "review_path": str(session_dir / "execution_report.md"),
             "artifacts_dir": execution.get("artifacts_dir") if execution else str(session_dir / "artifacts"),
+            "artifact_manifest_jsonl_path": (
+                execution.get("artifact_manifest_jsonl_path") if execution else str(session_dir / "execution_artifacts.jsonl")
+            ),
+            "artifact_index_md_path": (
+                execution.get("artifact_index_md_path") if execution else str(session_dir / "execution_artifacts.md")
+            ),
             "command_count": len(execution.get("commands") or []) if execution else 0,
             "external_artifact_count": len(execution.get("external_artifacts") or []) if execution else 0,
         },
@@ -525,6 +537,8 @@ def runtime_file_contract(root: Path, session_id: str, stages: list[dict[str, An
         "answer_review_events_jsonl_path": str(session_dir / "answer_review_events.jsonl"),
         "execution_review_json_path": str(session_dir / "execution_review.json"),
         "execution_report_md_path": str(session_dir / "execution_report.md"),
+        "execution_artifact_manifest_jsonl_path": str(session_dir / "execution_artifacts.jsonl"),
+        "execution_artifact_index_md_path": str(session_dir / "execution_artifacts.md"),
         "execution_review_events_jsonl_path": str(session_dir / "execution_review_events.jsonl"),
         "artifacts_dir": str(session_dir / "artifacts"),
     }
@@ -566,6 +580,8 @@ def render_session_markdown(session: dict[str, Any]) -> str:
             lines.append(f"  - Model input: `{stage['model_input_md_path']}`")
         if stage.get("artifacts_dir"):
             lines.append(f"  - Artifacts: `{stage['artifacts_dir']}`")
+        if stage.get("artifact_index_md_path"):
+            lines.append(f"  - Artifact index: `{stage['artifact_index_md_path']}`")
     lines.extend(["", "## Next Commands", ""])
     commands = session["next"].get("commands") or []
     if commands:
@@ -597,6 +613,8 @@ def render_session_markdown(session: dict[str, Any]) -> str:
             "  answer_review_events.jsonl",
             "  execution_review.json",
             "  execution_report.md",
+            "  execution_artifacts.jsonl",
+            "  execution_artifacts.md",
             "  execution_review_events.jsonl",
             "  artifacts/",
             "```",

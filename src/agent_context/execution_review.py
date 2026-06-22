@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import mimetypes
 import shlex
 import subprocess
 from datetime import datetime
@@ -64,6 +66,8 @@ def prepare_execution_review(root: Path, *, session_id: str, reason: str) -> dic
         "answer_packet_md_path": answer_review.get("answer_packet_md_path"),
         "answer_md_path": answer_review.get("answer_md_path"),
         "artifacts_dir": str(artifacts_dir),
+        "artifact_manifest_jsonl_path": str(session_dir / "execution_artifacts.jsonl"),
+        "artifact_index_md_path": str(session_dir / "execution_artifacts.md"),
         "execution_review_json_path": str(session_dir / "execution_review.json"),
         "execution_report_md_path": str(session_dir / "execution_report.md"),
         "events_jsonl_path": str(session_dir / "execution_review_events.jsonl"),
@@ -214,6 +218,8 @@ def load_execution_review(root: Path, session_id: str) -> dict[str, Any]:
 
 
 def persist_execution_review(root: Path, review: dict[str, Any], *, event_action: str, event_reason: str) -> None:
+    ensure_artifact_contract(review)
+    write_execution_artifact_index(review)
     write_text(Path(str(review["execution_review_json_path"])), json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     write_text(Path(str(review["execution_report_md_path"])), render_execution_report_markdown(review))
     event = execution_review_event(review, action=event_action, reason=event_reason)
@@ -233,9 +239,133 @@ def execution_review_event(review: dict[str, Any], *, action: str, reason: str) 
         "reason": reason,
         "artifacts_dir": review.get("artifacts_dir"),
         "execution_report_md_path": review.get("execution_report_md_path"),
+        "artifact_manifest_jsonl_path": review.get("artifact_manifest_jsonl_path"),
+        "artifact_index_md_path": review.get("artifact_index_md_path"),
         "last_run_id": review.get("last_run_id"),
         "last_returncode": review.get("last_returncode"),
     }
+
+
+def write_execution_artifact_index(review: dict[str, Any]) -> list[dict[str, Any]]:
+    manifest_path = Path(str(review["artifact_manifest_jsonl_path"]))
+    index_path = Path(str(review["artifact_index_md_path"]))
+    records = build_execution_artifact_records(review)
+    lines = [json.dumps(record, ensure_ascii=False, sort_keys=True) for record in records]
+    write_text(manifest_path, ("\n".join(lines) + "\n") if lines else "")
+    write_text(index_path, render_execution_artifact_index_markdown(review, records))
+    review["artifact_count"] = len(records)
+    return records
+
+
+def ensure_artifact_contract(review: dict[str, Any]) -> None:
+    if review.get("artifact_manifest_jsonl_path") and review.get("artifact_index_md_path"):
+        return
+    review_path = Path(str(review["execution_review_json_path"]))
+    session_dir = review_path.parent
+    review.setdefault("artifact_manifest_jsonl_path", str(session_dir / "execution_artifacts.jsonl"))
+    review.setdefault("artifact_index_md_path", str(session_dir / "execution_artifacts.md"))
+
+
+def build_execution_artifact_records(review: dict[str, Any]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for command in review.get("commands") or []:
+        for role, key in [
+            ("stdout", "stdout_path"),
+            ("stderr", "stderr_path"),
+            ("result_json", "result_json_path"),
+        ]:
+            path_value = command.get(key)
+            if path_value:
+                records.append(
+                    artifact_record(
+                        Path(str(path_value)),
+                        role=role,
+                        origin="command",
+                        run_id=command.get("run_id"),
+                        reason=command.get("reason"),
+                    )
+                )
+    for artifact in review.get("external_artifacts") or []:
+        path_value = artifact.get("path")
+        if path_value:
+            records.append(
+                artifact_record(
+                    Path(str(path_value)),
+                    role="external_artifact",
+                    origin="external",
+                    run_id=None,
+                    reason=artifact.get("reason"),
+                )
+            )
+    return records
+
+
+def artifact_record(path: Path, *, role: str, origin: str, run_id: str | None, reason: str | None) -> dict[str, Any]:
+    resolved = path.expanduser().resolve()
+    exists = resolved.exists() and resolved.is_file()
+    stat = resolved.stat() if exists else None
+    return {
+        "artifact_id": f"{origin}:{run_id or 'manual'}:{role}:{resolved.name}",
+        "origin": origin,
+        "role": role,
+        "run_id": run_id,
+        "path": str(resolved),
+        "name": resolved.name,
+        "exists": exists,
+        "size_bytes": stat.st_size if stat else 0,
+        "sha256": sha256_file(resolved) if exists else "",
+        "media_type": mimetypes.guess_type(str(resolved))[0] or "application/octet-stream",
+        "modified_at": datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat() if stat else "",
+        "reason": reason or "",
+    }
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def render_execution_artifact_index_markdown(review: dict[str, Any], records: list[dict[str, Any]]) -> str:
+    lines = [
+        "---",
+        f"execution_review_version: {review['execution_review_version']}",
+        f"session_id: {review['session_id']}",
+        f"artifact_count: {len(records)}",
+        "---",
+        "",
+        "# Doctor Execution Artifacts",
+        "",
+        "This file is the unified artifact index for the fourth review gate. It records command outputs and externally recorded files with stable paths and hashes.",
+        "",
+        f"- Execution report: `{review.get('execution_report_md_path')}`",
+        f"- JSONL manifest: `{review.get('artifact_manifest_jsonl_path')}`",
+        f"- Artifacts directory: `{review.get('artifacts_dir')}`",
+        "",
+        "## Artifacts",
+        "",
+    ]
+    if not records:
+        lines.append("- No artifacts recorded yet.")
+    else:
+        for record in records:
+            lines.extend(
+                [
+                    f"### {record['artifact_id']}",
+                    "",
+                    f"- Origin: `{record['origin']}`",
+                    f"- Role: `{record['role']}`",
+                    f"- Run: `{record.get('run_id')}`",
+                    f"- Path: `{record['path']}`",
+                    f"- Size: `{record['size_bytes']}` bytes",
+                    f"- SHA-256: `{record['sha256']}`",
+                    f"- Media type: `{record['media_type']}`",
+                    "",
+                ]
+            )
+    return "\n".join(lines)
 
 
 def render_execution_report_markdown(review: dict[str, Any]) -> str:
@@ -257,6 +387,8 @@ def render_execution_report_markdown(review: dict[str, Any]) -> str:
         f"- Answer packet: `{review.get('answer_packet_md_path')}`",
         f"- Answer: `{review.get('answer_md_path')}`",
         f"- Artifacts directory: `{review.get('artifacts_dir')}`",
+        f"- Artifact manifest: `{review.get('artifact_manifest_jsonl_path')}`",
+        f"- Artifact index: `{review.get('artifact_index_md_path')}`",
         "",
         "## Command Runs",
         "",

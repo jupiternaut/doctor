@@ -103,6 +103,8 @@ runtime/sessions/<session-id>/
   answer_review_events.jsonl
   execution_review.json
   execution_report.md
+  execution_artifacts.jsonl
+  execution_artifacts.md
   execution_review_events.jsonl
   artifacts/
 ```
@@ -154,6 +156,7 @@ The report checks:
 - the approved context has an `agent_handoff.md` bridge for external agents
 - stage 3 has recorded and approved an answer
 - stage 4 has run or recorded an artifact and approved the execution output
+- stage 4 has indexed produced files in `execution_artifacts.jsonl`
 - MCP exposes the runtime tools needed by external agents
 
 If a session is waiting for user review, the report stays incomplete and records
@@ -220,10 +223,11 @@ Implemented:
 - acceptance handoff reports
 - `panel/status.json` runtime VM status for UI clients
 - localhost clickable review server for the current gate
+- unified execution artifact manifest/index for command outputs and recorded files
 
 Still outside this shell:
 
 - real automatic model answering
 - default Codex++/Warp interception for every task
-- unified execution runtime beyond explicit reviewed commands
+- richer execution adapters beyond explicit reviewed commands and recorded artifacts
 - embedded Codex++/Warp native UI for approving each gate
