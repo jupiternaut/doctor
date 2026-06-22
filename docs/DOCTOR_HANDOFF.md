@@ -37,7 +37,7 @@ Evidence from the latest local reports:
 | Hot context pack | Latest pack has 12 sources |
 | MCP surface | Live stdio smoke passed, 39 tools exposed |
 | Feedback loop | Replay health ok, latest expected top1 rate 0.833333 |
-| Codex++ integration | Default hook and Manager smoke passed |
+| Codex++ integration | Default hook, Manager smoke, model-input review, and answer-review handoff passed |
 | Safety | Access policy has 17 deny path patterns |
 | V1 acceptance | 8/10 stages ok; remaining items are time-gated semantic evidence |
 
@@ -141,6 +141,13 @@ uv run ./doctor v1-refresh \
   session through `/agent-context/model-input-review`, and appends only the
   reviewable `model_input.md`/`context.md`/`sources.jsonl` paths back to the
   turn with a "do not answer until user review" instruction.
+- Codex++'s live injected task flow now recognizes a second explicit approval
+  such as approving `model_input` for answering. It calls
+  `/agent-context/answer-review`, which approves Doctor's context gate, advances
+  the active session through `agent-preflight --advance answer`, and appends the
+  approved `model_input.md`, `agent_handoff.md`, and `answer_packet.md` paths to
+  the turn. This is the first live path where Codex++ can show exactly what it is
+  about to feed a model after the user has reviewed Doctor's context.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
 - A synthetic end-to-end runtime session
@@ -153,8 +160,8 @@ uv run ./doctor v1-refresh \
 ## Known Gaps
 
 - Warp interception for every task is still not wired as a native runtime
-  entrypoint, and Codex++ still needs native answer/review and execution/review
-  controls embedded in the live task flow.
+  entrypoint, and Codex++ still needs native execution/review controls embedded
+  in the live task flow.
 - User-facing UI is still weaker than OpenClaw, ChatGPT Projects, and Claude
   Code.
 - Metadata model is not yet as mature as DataHub or OpenMetadata.
