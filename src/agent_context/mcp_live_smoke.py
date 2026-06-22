@@ -24,6 +24,7 @@ REQUIRED_TOOLS = [
     "doctor_runtime_handoff",
     "doctor_runtime_adapter",
     "doctor_runtime_review_client",
+    "doctor_runtime_review_launch",
     "doctor_context_review",
     "doctor_answer_review",
     "doctor_execution_review",

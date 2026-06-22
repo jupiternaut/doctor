@@ -169,6 +169,15 @@ doctor runtime-review-client \
 
 It writes `runtime/sessions/<session-id>/review_client/` with a self-contained
 HTML client, a JavaScript API helper, and `runtime-review-api-contract.json`.
+Use the launch contract when a wrapper wants the server URL, API URL, client
+path, and exact start/open commands in one file:
+
+```bash
+doctor runtime-review-launch \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --port 8765
+```
 
 For Codex++, Warp, Codex CLI, or an MCP client, prefer the unified preflight
 entrypoint. It returns `agent_preflight.md/json`, which tells the client which
@@ -623,6 +632,7 @@ The MCP server exposes local tools for `resolve_context`, `search_context`,
 `index_context`, `refresh_providers`, `index_projects`,
 `doctor_run`, `doctor_agent_preflight`, `doctor_session`, `doctor_runtime_acceptance`,
 `doctor_runtime_handoff`, `doctor_runtime_adapter`, `doctor_runtime_review_client`,
+`doctor_runtime_review_launch`,
 `doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,
 `codebase_memory_index`, `codebase_memory_search`, `index_sessions`, `build_hot_pack`, `read_source`,
 `context_panel`, `record_feedback`, `record_panel_feedback`,

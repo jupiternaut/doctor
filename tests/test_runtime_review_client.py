@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from agent_context.cli import main
-from agent_context.mcp_server import mcp_doctor_runtime_review_client
-from agent_context.runtime_review_client import export_runtime_review_client
+from agent_context.mcp_server import mcp_doctor_runtime_review_client, mcp_doctor_runtime_review_launch
+from agent_context.runtime_review_client import export_runtime_review_client, export_runtime_review_launch
 from agent_context.runtime_vm import start_runtime_session
 
 
@@ -34,6 +34,24 @@ def test_runtime_review_client_exports_embeddable_files(tmp_path: Path) -> None:
     assert "Doctor Runtime Review Client" in html_path.read_text(encoding="utf-8")
     assert "DoctorRuntimeReviewClient" in js_path.read_text(encoding="utf-8")
     assert "/api/session" in contract_path.read_text(encoding="utf-8")
+
+
+def test_runtime_review_launch_exports_commands_and_client(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    start_runtime_session(out, "导出 Doctor 审查启动合约", session_id="review-launch")
+
+    result = export_runtime_review_launch(out, "review-launch", host="127.0.0.1", port=9876)
+
+    assert result["status"] == "ready"
+    assert result["review_server_url"] == "http://127.0.0.1:9876/"
+    assert result["api_session_url"] == "http://127.0.0.1:9876/api/session"
+    assert "runtime-review-server" in result["start_server_command"]
+    assert "runtime-review-client" in result["export_client_command"]
+    assert result["open_client_command"].startswith("open ")
+    assert Path(result["files"]["launch_json"]).exists()
+    assert Path(result["files"]["launch_md"]).exists()
+    assert Path(result["files"]["client_html"]).exists()
+    assert "Doctor Runtime Review Launch" in Path(result["files"]["launch_md"]).read_text(encoding="utf-8")
 
 
 def test_runtime_review_client_cli_and_mcp(tmp_path: Path, capsys) -> None:
@@ -65,3 +83,28 @@ def test_runtime_review_client_cli_and_mcp(tmp_path: Path, capsys) -> None:
     assert mcp_result["mcp_version"] == "0.1"
     assert mcp_result["review_server_url"] == "http://127.0.0.1:7777/"
     assert Path(mcp_result["files"]["javascript"]).exists()
+
+    assert main(
+        [
+            "runtime-review-launch",
+            "--out",
+            str(out),
+            "--session-id",
+            "review-client-cli",
+            "--port",
+            "9876",
+        ]
+    ) == 0
+    launch_result = json.loads(capsys.readouterr().out)
+
+    assert launch_result["review_server_url"] == "http://127.0.0.1:9876/"
+    assert Path(launch_result["files"]["launch_md"]).exists()
+
+    mcp_launch = mcp_doctor_runtime_review_launch(
+        "review-client-cli",
+        port=9877,
+        out_root=str(out),
+    )
+
+    assert mcp_launch["mcp_version"] == "0.1"
+    assert mcp_launch["api_action_url"] == "http://127.0.0.1:9877/api/action"

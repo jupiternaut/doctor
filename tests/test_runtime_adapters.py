@@ -33,12 +33,14 @@ def test_runtime_adapter_package_exports_target_files(tmp_path: Path) -> None:
     wrapper_path = Path(manifest["adapter_files"]["codex_cli_wrapper"])
     review_client_html = Path(manifest["adapter_files"]["review_client_html"])
     review_client_js = Path(manifest["adapter_files"]["review_client_js"])
+    review_launch_manifest = Path(manifest["adapter_files"]["review_launch_manifest"])
     assert manifest_path.exists()
     assert overview_path.exists()
     assert env_path.exists()
     assert wrapper_path.exists()
     assert review_client_html.exists()
     assert review_client_js.exists()
+    assert review_launch_manifest.exists()
     assert os.access(env_path, os.X_OK)
     assert os.access(wrapper_path, os.X_OK)
     assert Path(manifest["adapter_files"]["codex-plus_doc"]).exists()
@@ -48,7 +50,9 @@ def test_runtime_adapter_package_exports_target_files(tmp_path: Path) -> None:
     assert data["entrypoints"]["agent_preflight_context"].startswith("doctor agent-preflight")
     assert data["mcp_tool_sequence"][0]["tool"] == "doctor_agent_preflight"
     assert data["mcp_tool_sequence"][2]["tool"] == "doctor_runtime_review_client"
+    assert data["mcp_tool_sequence"][3]["tool"] == "doctor_runtime_review_launch"
     assert data["review_client"]["html"].endswith("doctor-runtime-review-client.html")
+    assert data["review_launch"]["markdown"].endswith("review_launch.md")
     assert "Doctor Runtime Adapter" in overview_path.read_text(encoding="utf-8")
 
 

@@ -323,6 +323,7 @@ def render_panel_html(status: dict[str, Any], status_path: Path) -> str:
         ("Runtime VM Agent Handoff", (status.get("runtime_vm") or {}).get("agent_handoff_md_path") or ""),
         ("Runtime VM Adapter Manifest", (status.get("runtime_vm") or {}).get("runtime_adapter_manifest_json_path") or ""),
         ("Runtime VM Review Client", (status.get("runtime_vm") or {}).get("runtime_review_client_html_path") or ""),
+        ("Runtime VM Review Launch", (status.get("runtime_vm") or {}).get("runtime_review_launch_md_path") or ""),
         ("Runtime VM Artifact Index", (status.get("runtime_vm") or {}).get("execution_artifact_index_md_path") or ""),
         ("Runtime VM Report", (status.get("runtime_vm") or {}).get("latest_md_path") or ""),
         (
@@ -522,6 +523,7 @@ def latest_runtime_vm_acceptance(out_root: Path) -> dict[str, Any]:
         "agent_handoff_md_path": files.get("agent_handoff_md_path", ""),
         "runtime_adapter_manifest_json_path": files.get("runtime_adapter_manifest_json_path", ""),
         "runtime_review_client_html_path": files.get("runtime_review_client_html_path", ""),
+        "runtime_review_launch_md_path": files.get("runtime_review_launch_md_path", ""),
         "execution_artifact_index_md_path": files.get("execution_artifact_index_md_path", ""),
         "next_message": next_state.get("message", ""),
         "next_commands": next_state.get("commands") if isinstance(next_state.get("commands"), list) else [],

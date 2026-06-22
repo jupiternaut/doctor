@@ -49,7 +49,7 @@ from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_health import run_runtime_health, run_semantic_readiness
 from .runtime_adapters import export_runtime_adapter_package
-from .runtime_review_client import export_runtime_review_client
+from .runtime_review_client import export_runtime_review_client, export_runtime_review_launch
 from .runtime_review_server import run_runtime_review_server
 from .runtime_vm import export_runtime_handoff, inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status
@@ -157,6 +157,12 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_review_client.add_argument("--session-id", required=True, help="Runtime session id to export a review client for.")
     runtime_review_client.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     runtime_review_client.add_argument("--review-server-url", default="http://127.0.0.1:8765/", help="Runtime review server base URL for the generated client.")
+
+    runtime_review_launch = subparsers.add_parser("runtime-review-launch", help="Export review client files plus a launch manifest with server/client commands.")
+    runtime_review_launch.add_argument("--session-id", required=True, help="Runtime session id to export a review launch contract for.")
+    runtime_review_launch.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    runtime_review_launch.add_argument("--host", default="127.0.0.1", help="Review server host for the launch contract.")
+    runtime_review_launch.add_argument("--port", type=int, default=8765, help="Review server port for the launch contract.")
 
     runtime_review_server = subparsers.add_parser("runtime-review-server", help="Serve a local clickable Doctor runtime review UI.")
     runtime_review_server.add_argument("--session-id", required=True, help="Runtime session id to review.")
@@ -790,6 +796,29 @@ def main(argv: list[str] | None = None) -> int:
                     {
                         "status": "error",
                         "command": "runtime-review-client",
+                        "session_id": args.session_id,
+                        "error": str(exc),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 1
+    elif args.command == "runtime-review-launch":
+        try:
+            result = export_runtime_review_launch(
+                out_root,
+                args.session_id,
+                host=args.host,
+                port=args.port,
+            )
+        except FileNotFoundError as exc:
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "command": "runtime-review-launch",
                         "session_id": args.session_id,
                         "error": str(exc),
                     },

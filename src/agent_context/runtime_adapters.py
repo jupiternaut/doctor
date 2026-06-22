@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .io import ensure_dir, write_text
-from .runtime_review_client import export_runtime_review_client
+from .runtime_review_client import export_runtime_review_client, export_runtime_review_launch
 from .runtime_vm import inspect_runtime_session
 
 
@@ -34,7 +34,8 @@ def export_runtime_adapter_package(
     env_path = adapter_dir / "doctor-runtime-env.sh"
     codex_cli_path = adapter_dir / "codex-cli-runtime.sh"
     mcp_sequence_path = adapter_dir / "mcp_tool_sequence.json"
-    review_client = export_runtime_review_client(root, session_id, review_server_url=f"http://127.0.0.1:{int(review_port)}/")
+    review_launch = export_runtime_review_launch(root, session_id, port=int(review_port))
+    review_client = review_launch["review_client"]
     target_docs = {
         "codex-plus": adapter_dir / "codex-plus-runtime.md",
         "warp": adapter_dir / "warp-runtime.md",
@@ -51,6 +52,8 @@ def export_runtime_adapter_package(
         "review_client_html": review_client["files"]["html"],
         "review_client_js": review_client["files"]["javascript"],
         "review_api_contract": review_client["files"]["api_contract"],
+        "review_launch_manifest": review_launch["files"]["launch_json"],
+        "review_launch_markdown": review_launch["files"]["launch_md"],
     }
     adapter_files.update({f"{target}_doc": str(path) for target, path in target_docs.items() if target in selected_targets})
     manifest = {
@@ -72,6 +75,13 @@ def export_runtime_adapter_package(
             "html": review_client["files"]["html"],
             "javascript": review_client["files"]["javascript"],
             "api_contract": review_client["files"]["api_contract"],
+        },
+        "review_launch": {
+            "manifest": review_launch["files"]["launch_json"],
+            "markdown": review_launch["files"]["launch_md"],
+            "review_server_url": review_launch["review_server_url"],
+            "start_server_command": review_launch["start_server_command"],
+            "open_client_command": review_launch["open_client_command"],
         },
         "entrypoints": adapter_entrypoints(root, session_id, agent_command=agent_command, review_port=review_port),
         "mcp_tool_sequence": mcp_tool_sequence(session_id, agent_command=agent_command),
@@ -114,6 +124,7 @@ def adapter_entrypoints(root: Path, session_id: str, *, agent_command: str, revi
         "agent_preflight_handoff": doctor_command(root, "agent-preflight", "--session-id", session_id, "--advance", "handoff", "--agent-command", quote_arg(agent_command)),
         "review_server": doctor_command(root, "runtime-review-server", "--session-id", session_id, "--port", str(int(review_port))),
         "export_review_client": doctor_command(root, "runtime-review-client", "--session-id", session_id, "--review-server-url", quote_arg(f"http://127.0.0.1:{int(review_port)}/")),
+        "export_review_launch": doctor_command(root, "runtime-review-launch", "--session-id", session_id, "--port", str(int(review_port))),
         "generate_context": doctor_command(root, "context-review", "--session-id", session_id, "--action", "generate", "--source-scope", "all", "--limit", "8"),
         "export_handoff": doctor_command(root, "runtime-handoff", "--session-id", session_id),
         "export_adapter": doctor_command(root, "runtime-adapter", "--session-id", session_id, "--agent-command", quote_arg(agent_command)),
@@ -130,6 +141,7 @@ def mcp_tool_sequence(session_id: str, *, agent_command: str) -> list[dict[str, 
         {"tool": "doctor_agent_preflight", "arguments": {"session_id": session_id, "advance": "clarify", "goal": "<user task>"}},
         {"tool": "doctor_agent_preflight", "arguments": {"session_id": session_id, "advance": "context", "source_scope": "all", "limit": 8}},
         {"tool": "doctor_runtime_review_client", "arguments": {"session_id": session_id}},
+        {"tool": "doctor_runtime_review_launch", "arguments": {"session_id": session_id}},
         {"tool": "doctor_context_review", "arguments": {"session_id": session_id, "action": "approve", "reason": "context matches intent"}},
         {"tool": "doctor_agent_preflight", "arguments": {"session_id": session_id, "advance": "handoff", "agent_command": agent_command}},
         {"tool": "doctor_answer_review", "arguments": {"session_id": session_id, "action": "prepare"}},

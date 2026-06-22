@@ -10,6 +10,7 @@ from .runtime_vm import inspect_runtime_session
 
 
 RUNTIME_REVIEW_CLIENT_VERSION = "0.1"
+RUNTIME_REVIEW_LAUNCH_VERSION = "0.1"
 
 
 def export_runtime_review_client(
@@ -50,6 +51,95 @@ def export_runtime_review_client(
     write_text(js_path, render_review_client_js())
     write_text(html_path, render_review_client_html(manifest))
     return manifest
+
+
+def export_runtime_review_launch(
+    out_root: str | Path,
+    session_id: str,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+) -> dict[str, Any]:
+    root = Path(out_root).expanduser().resolve()
+    review_server_url = f"http://{host}:{int(port)}/"
+    client = export_runtime_review_client(root, session_id, review_server_url=review_server_url)
+    client_dir = Path(str(client["files"]["manifest"])).parent
+    launch_json_path = client_dir / "review_launch.json"
+    launch_md_path = client_dir / "review_launch.md"
+    launch = {
+        "runtime_review_launch_version": RUNTIME_REVIEW_LAUNCH_VERSION,
+        "status": "ready",
+        "created_at": datetime.now().astimezone().isoformat(),
+        "session_id": session_id,
+        "out_root": str(root),
+        "host": host,
+        "port": int(port),
+        "review_server_url": review_server_url,
+        "api_session_url": review_server_url + "api/session",
+        "api_action_url": review_server_url + "api/action",
+        "client_html_path": client["files"]["html"],
+        "client_js_path": client["files"]["javascript"],
+        "api_contract_path": client["files"]["api_contract"],
+        "review_client_manifest_path": client["files"]["manifest"],
+        "start_server_command": doctor_command(root, "runtime-review-server", "--session-id", session_id, "--host", host, "--port", str(int(port))),
+        "export_client_command": doctor_command(root, "runtime-review-client", "--session-id", session_id, "--review-server-url", quote_arg(review_server_url)),
+        "open_client_command": "open " + quote_arg(client["files"]["html"]),
+        "files": {
+            "launch_json": str(launch_json_path),
+            "launch_md": str(launch_md_path),
+            "client_html": client["files"]["html"],
+            "client_js": client["files"]["javascript"],
+            "api_contract": client["files"]["api_contract"],
+            "review_client_manifest": client["files"]["manifest"],
+        },
+        "review_client": client,
+    }
+    write_text(launch_json_path, json.dumps(launch, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    write_text(launch_md_path, render_review_launch_markdown(launch))
+    return launch
+
+
+def render_review_launch_markdown(launch: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "---",
+            f"runtime_review_launch_version: {launch['runtime_review_launch_version']}",
+            f"status: {launch['status']}",
+            f"session_id: {launch['session_id']}",
+            "---",
+            "",
+            "# Doctor Runtime Review Launch",
+            "",
+            "This file is the launch contract for a Doctor runtime review surface. Start the local server, then open or embed the generated client.",
+            "",
+            "## URLs",
+            "",
+            f"- Review server: `{launch['review_server_url']}`",
+            f"- Session API: `{launch['api_session_url']}`",
+            f"- Action API: `{launch['api_action_url']}`",
+            "",
+            "## Files",
+            "",
+            f"- Client HTML: `{launch['client_html_path']}`",
+            f"- Client JS: `{launch['client_js_path']}`",
+            f"- API contract: `{launch['api_contract_path']}`",
+            "",
+            "## Commands",
+            "",
+            "Start the review server:",
+            "",
+            "```bash",
+            launch["start_server_command"],
+            "```",
+            "",
+            "Open the embeddable client:",
+            "",
+            "```bash",
+            launch["open_client_command"],
+            "```",
+            "",
+        ]
+    )
 
 
 def normalize_review_server_url(url: str) -> str:
@@ -247,3 +337,12 @@ def render_review_client_js() -> str:
 
 def escape_attr(value: str) -> str:
     return value.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def doctor_command(root: Path, command: str, *args: str) -> str:
+    return " ".join(["doctor", command, "--out", quote_arg(str(root)), *args])
+
+
+def quote_arg(value: str) -> str:
+    escaped = value.replace("'", "'\"'\"'")
+    return f"'{escaped}'"

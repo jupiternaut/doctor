@@ -127,6 +127,8 @@ uv run ./doctor v1-refresh \
   for native Codex++/Warp panels, in addition to the local HTML review page.
 - Doctor can export an embeddable `review_client/` HTML/JS client and API
   contract for Codex++/Warp native panels or webviews.
+- Doctor can export `review_launch.json/md` with the review server URL, API
+  URLs, generated client path, and exact start/open commands.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
 

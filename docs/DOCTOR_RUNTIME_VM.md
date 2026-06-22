@@ -79,6 +79,15 @@ doctor runtime-review-client \
   --review-server-url http://127.0.0.1:8765/
 ```
 
+Export a launch contract with server/client commands:
+
+```bash
+doctor runtime-review-launch \
+  --out /Users/gengrf/agent-context-system \
+  --session-id doctor-demo \
+  --port 8765
+```
+
 The session entrypoint is:
 
 ```text
@@ -166,6 +175,7 @@ The MCP server exposes:
 - `doctor_runtime_handoff`: export approved `model_input.md` for Codex++, Warp, or Doctor
 - `doctor_runtime_adapter`: export adapter files for Codex++, Warp, Codex CLI, and MCP clients
 - `doctor_runtime_review_client`: export an embeddable HTML/JS review client and API contract
+- `doctor_runtime_review_launch`: export a launch manifest with server/client commands
 - `doctor_context_review`: generate, regenerate, approve, or reject `model_input.md`
 - `doctor_answer_review`: prepare, run, record, approve, or reject the answer packet
 - `doctor_execution_review`: prepare, run, record, approve, or reject local artifacts
@@ -263,6 +273,8 @@ review_client_manifest.json
 doctor-runtime-review-client.html
 doctor-runtime-review-client.js
 runtime-review-api-contract.json
+review_launch.json
+review_launch.md
 ```
 
 Codex++ or Warp can embed that HTML file, reuse the JavaScript helper, or ignore
@@ -292,6 +304,7 @@ Implemented:
 - approved-context handoff export for Codex++/Warp/Doctor
 - runtime adapter package for Codex++/Warp/Codex CLI/MCP clients
 - embeddable runtime review client and API contract for native panels
+- runtime review launch manifest with server/client commands
 - answer-stage command adapter that feeds `answer_packet.md` to local agents on stdin
 - acceptance handoff reports
 - `panel/status.json` runtime VM status for UI clients

@@ -49,6 +49,9 @@ doctor_runtime_adapter(session_id, targets=null, agent_command="<agent command>"
 doctor_runtime_review_client(session_id, review_server_url="http://127.0.0.1:8765/")
   Export an embeddable HTML/JS review client plus runtime-review-api-contract.json for Codex++, Warp, Codex CLI, or MCP clients.
 
+doctor_runtime_review_launch(session_id, host="127.0.0.1", port=8765)
+  Export a launch manifest with review server URL, API URLs, client HTML path, and exact start/open commands.
+
 doctor_context_review(action="generate", session_id=null, refined_prompt_path=null, reason="", source_scope="all", limit=12, mode="fast")
   Generate, regenerate, approve, or reject the reviewable model_input.md payload.
 
