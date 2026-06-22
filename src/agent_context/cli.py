@@ -17,6 +17,7 @@ from .codex_plus_smoke import run_codex_plus_smoke
 from .compare import compare_routes
 from .context_review import run_context_review
 from .embedding_benchmark import run_embedding_benchmark
+from .execution_review import run_execution_review
 from .evidence_index import build_evidence_index, search_evidence_index
 from .feedback_model import write_feedback_model
 from .feedback_replay import run_feedback_replay
@@ -178,6 +179,16 @@ def build_parser() -> argparse.ArgumentParser:
     answer_review.add_argument("--answer-file", default=None, help="Path to answer Markdown/text for --action record.")
     answer_review.add_argument("--reason", default="", help="Optional preparation or review reason.")
     answer_review.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    execution_review = subparsers.add_parser("execution-review", help="Prepare, run, record, or review local execution artifacts.")
+    execution_review.add_argument("--action", choices=["prepare", "run", "record", "approve", "reject"], default="prepare", help="Execution review action.")
+    execution_review.add_argument("--session-id", required=True, help="Runtime session id.")
+    execution_review.add_argument("--command", dest="execution_command", default="", help="Command to run for --action run. Parsed without shell expansion.")
+    execution_review.add_argument("--cwd", default=None, help="Working directory for --action run. Defaults to --out.")
+    execution_review.add_argument("--timeout-seconds", type=int, default=120, help="Maximum seconds for --action run.")
+    execution_review.add_argument("--artifact-file", default=None, help="Path to an externally generated artifact for --action record.")
+    execution_review.add_argument("--reason", default="", help="Optional preparation, run, or review reason.")
+    execution_review.add_argument("--out", default=None, help="Output root. Overrides global --out.")
 
     panel = subparsers.add_parser("panel", help="Write Context Panel status JSON and a local HTML panel.")
     panel.add_argument("--goal", default=None, help="Optional task goal; when provided, run Codex preflight before writing panel status.")
@@ -685,6 +696,34 @@ def main(argv: list[str] | None = None) -> int:
                     {
                         "status": "error",
                         "command": "answer-review",
+                        "action": args.action,
+                        "session_id": args.session_id,
+                        "error": str(exc),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 1
+    elif args.command == "execution-review":
+        try:
+            result = run_execution_review(
+                out_root,
+                action=args.action,
+                session_id=args.session_id,
+                command=args.execution_command,
+                cwd=args.cwd,
+                timeout_seconds=args.timeout_seconds,
+                artifact_file=args.artifact_file,
+                reason=args.reason,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "command": "execution-review",
                         "action": args.action,
                         "session_id": args.session_id,
                         "error": str(exc),

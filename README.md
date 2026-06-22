@@ -215,6 +215,39 @@ agent-context answer-review \
 
 Approve/reject events append to `feedback/answer_review_feedback.jsonl`.
 
+Stage 4 runs local programs only after the recorded answer is approved:
+
+```bash
+agent-context execution-review \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --action prepare
+
+agent-context execution-review \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --action run \
+  --command "python scripts/build_report.py" \
+  --cwd /Users/gengrf/agent-context-system \
+  --timeout-seconds 120
+```
+
+It writes:
+
+```text
+runtime/sessions/<session-id>/execution_review.json
+runtime/sessions/<session-id>/execution_report.md
+runtime/sessions/<session-id>/execution_review_events.jsonl
+runtime/sessions/<session-id>/artifacts/<run-id>.stdout.txt
+runtime/sessions/<session-id>/artifacts/<run-id>.stderr.txt
+runtime/sessions/<session-id>/artifacts/<run-id>.json
+```
+
+Approve/reject events append to `feedback/execution_review_feedback.jsonl`.
+Commands are explicit user-provided commands, parsed without shell expansion;
+stdout, stderr, return code, timeout status, and artifact paths are recorded for
+review.
+
 ## Fixture Validation
 
 ```bash
