@@ -136,6 +136,11 @@ uv run ./doctor v1-refresh \
   session through `agent-preflight --advance context`, persist
   `model_input.md`, and open that exact model payload for user review before
   anything is sent to a model.
+- Codex++'s live injected task flow now also recognizes an explicit user
+  approval such as generating `model_input` context, advances the active Doctor
+  session through `/agent-context/model-input-review`, and appends only the
+  reviewable `model_input.md`/`context.md`/`sources.jsonl` paths back to the
+  turn with a "do not answer until user review" instruction.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
 - A synthetic end-to-end runtime session
@@ -148,8 +153,8 @@ uv run ./doctor v1-refresh \
 ## Known Gaps
 
 - Warp interception for every task is still not wired as a native runtime
-  entrypoint, and Codex++ still needs the same review-gate affordance embedded
-  directly in the live task flow rather than only in Manager.
+  entrypoint, and Codex++ still needs native answer/review and execution/review
+  controls embedded in the live task flow.
 - User-facing UI is still weaker than OpenClaw, ChatGPT Projects, and Claude
   Code.
 - Metadata model is not yet as mature as DataHub or OpenMetadata.
