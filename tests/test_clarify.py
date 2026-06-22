@@ -70,3 +70,14 @@ def test_clarify_detects_four_stage_runtime_pipeline(tmp_path: Path) -> None:
     assert result["source_scope_hint"] == "all"
     assert "four-stage runtime packet" in result["expected_output"]
     assert "Doctor runtime docs" in result["evidence_need"]
+
+
+def test_clarify_detects_doctor_context_vm_as_runtime_pipeline(tmp_path: Path) -> None:
+    result = build_clarification(
+        tmp_path / "out",
+        "把 Doctor 四阶段运行时封装成 Docker-like macOS context VM",
+        session_id="session-context-vm",
+    )
+
+    assert result["intent"] == "runtime_pipeline"
+    assert "four-stage runtime packet" in result["expected_output"]

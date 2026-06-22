@@ -23,6 +23,7 @@ raw files
 - [Doctor Handoff](docs/DOCTOR_HANDOFF.md)
 - [Doctor Vision Roadmap](docs/DOCTOR_VISION_ROADMAP.md)
 - [Doctor Research Scorecard](docs/DOCTOR_RESEARCH_SCORECARD.md)
+- [Doctor Runtime VM](docs/DOCTOR_RUNTIME_VM.md)
 - [Doctor Douyin v0.1](docs/DOCTOR_DOUYIN_V0_1.md)
 - [Doctor Lab](docs/DOCTOR_LAB.md)
 - [Context MoE Interface](docs/CONTEXT_MOE_INTERFACE.md)
@@ -115,6 +116,25 @@ context pack, shows top sources, and records `/good <n>` or `/bad <n>` feedback
 into the existing feedback model.
 
 ## Four-Stage Runtime
+
+Use the product-level shell when you want a Docker-like session entrypoint:
+
+```bash
+doctor run \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历"
+
+doctor session \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id>
+```
+
+It writes `runtime/sessions/<session-id>/DOCTOR_SESSION.md`,
+`runtime_session.json`, and `runtime_session.md`. That session file shows the
+current gate, the next review file, and the exact command that advances the
+runtime. See [Doctor Runtime VM](docs/DOCTOR_RUNTIME_VM.md) for the directory
+contract.
 
 Stage 1 is a no-index clarification pass. It normalizes the user's natural
 language task into a reviewable prompt before Doctor is allowed to read local
@@ -492,6 +512,7 @@ uv run agent-context mcp --out /Users/gengrf/agent-context-system
 
 The MCP server exposes local tools for `resolve_context`, `search_context`,
 `index_context`, `refresh_providers`, `index_projects`,
+`doctor_run`, `doctor_session`,
 `codebase_memory_index`, `codebase_memory_search`, `index_sessions`, `build_hot_pack`, `read_source`,
 `context_panel`, `record_feedback`, `record_panel_feedback`,
 `resolve_alternative_context`,

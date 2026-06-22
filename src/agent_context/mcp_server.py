@@ -51,6 +51,7 @@ from .retrieval_eval import run_retrieval_eval
 from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_health import run_runtime_health, run_semantic_readiness
+from .runtime_vm import inspect_runtime_session, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status as read_semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
 from .session_index import build_session_index, session_index_path_for
@@ -133,6 +134,25 @@ def mcp_resolve_context(
             }
             for source in sources[:limit]
         ],
+    }
+
+
+def mcp_doctor_run(
+    goal: str,
+    session_id: str | None = None,
+    mode: str = "standard",
+    out_root: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "mcp_version": MCP_VERSION,
+        **start_runtime_session(resolve_out_root(out_root), goal, session_id=session_id, mode=mode),
+    }
+
+
+def mcp_doctor_session(session_id: str, out_root: str | None = None) -> dict[str, Any]:
+    return {
+        "mcp_version": MCP_VERSION,
+        **inspect_runtime_session(resolve_out_root(out_root), session_id),
     }
 
 
@@ -1192,6 +1212,16 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
     def resolve_context(goal: str, limit: int = 12, source_scope: str = "all") -> dict[str, Any]:
         """Resolve a task goal into a Codex-readable hot context pack."""
         return mcp_resolve_context(goal=goal, limit=limit, source_scope=source_scope, out_root=str(root))
+
+    @server.tool()
+    def doctor_run(goal: str, session_id: str | None = None, mode: str = "standard") -> dict[str, Any]:
+        """Start a Doctor runtime session with no-index clarification."""
+        return mcp_doctor_run(goal=goal, session_id=session_id, mode=mode, out_root=str(root))
+
+    @server.tool()
+    def doctor_session(session_id: str) -> dict[str, Any]:
+        """Inspect a Doctor runtime session and write DOCTOR_SESSION.md."""
+        return mcp_doctor_session(session_id=session_id, out_root=str(root))
 
     @server.tool()
     def resolve_alternative_context(

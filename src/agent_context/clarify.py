@@ -64,6 +64,8 @@ def classify_goal(goal: str) -> dict[str, str]:
     lower = goal.lower()
     if (
         ("归一化" in goal and "冷热索引" in goal)
+        or ("四阶段" in goal and ("doctor" in lower or "context vm" in lower or "运行时" in goal))
+        or ("docker-like" in lower and ("doctor" in lower or "context vm" in lower))
         or ("model_input" in lower and "codex-preflight" in lower)
         or ("artifacts" in lower and ("doctor" in lower or "codex" in lower))
     ):

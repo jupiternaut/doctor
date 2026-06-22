@@ -47,6 +47,7 @@ from .retrieval_eval import run_retrieval_eval
 from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_health import run_runtime_health, run_semantic_readiness
+from .runtime_vm import inspect_runtime_session, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
 from .semantic import semantic_status
@@ -106,6 +107,16 @@ def build_parser() -> argparse.ArgumentParser:
     clarify.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     clarify.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
     clarify.add_argument("--mode", choices=["fast", "standard"], default="standard", help="Clarification mode metadata.")
+
+    doctor_run = subparsers.add_parser("run", help="Start a Doctor runtime session with no-index clarification.")
+    doctor_run.add_argument("--goal", required=True, help="Original user task to normalize for review.")
+    doctor_run.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    doctor_run.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
+    doctor_run.add_argument("--mode", choices=["fast", "standard"], default="standard", help="Clarification mode metadata.")
+
+    doctor_session = subparsers.add_parser("session", help="Inspect a Doctor runtime session and write DOCTOR_SESSION.md.")
+    doctor_session.add_argument("--session-id", required=True, help="Runtime session id to inspect.")
+    doctor_session.add_argument("--out", default=None, help="Output root. Overrides global --out.")
 
     resolve = subparsers.add_parser("resolve", help="Resolve a task goal into a hot context pack.")
     resolve.add_argument("--goal", required=True, help="Task goal to resolve into relevant local context.")
@@ -640,6 +651,10 @@ def main(argv: list[str] | None = None) -> int:
         result = search_evidence_index(out_root, args.query, limit=max(1, args.limit))
     elif args.command == "clarify":
         result = build_clarification(out_root, args.goal, session_id=args.session_id, mode=args.mode)
+    elif args.command == "run":
+        result = start_runtime_session(out_root, args.goal, session_id=args.session_id, mode=args.mode)
+    elif args.command == "session":
+        result = inspect_runtime_session(out_root, args.session_id)
     elif args.command == "resolve":
         result = resolve_context(out_root, args.goal, limit=args.limit, source_scope=args.source_scope)
     elif args.command == "lab":
