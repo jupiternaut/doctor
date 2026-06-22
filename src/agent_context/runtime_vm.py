@@ -20,9 +20,10 @@ def start_runtime_session(
     *,
     session_id: str | None = None,
     mode: str = "standard",
+    image_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     root = Path(out_root).expanduser().resolve()
-    clarification = build_clarification(root, goal, session_id=session_id, mode=mode)
+    clarification = build_clarification(root, goal, session_id=session_id, mode=mode, image_paths=image_paths)
     result = inspect_runtime_session(root, clarification["session_id"], write_report=False)
     result["started_stage"] = "clarify"
     result["original_goal"] = goal
@@ -569,6 +570,7 @@ def runtime_file_contract(root: Path, session_id: str, stages: list[dict[str, An
         "runtime_task_json_path": str(session_dir / "runtime_task.json"),
         "runtime_task_md_path": str(session_dir / "runtime_task.md"),
         "clarify_json_path": str(session_dir / "clarify.json"),
+        "attachments_json_path": str(session_dir / "attachments.json"),
         "refined_prompt_md_path": str(session_dir / "refined_prompt.md"),
         "context_review_json_path": str(session_dir / "context_review.json"),
         "context_review_md_path": str(session_dir / "context_review.md"),
@@ -662,6 +664,7 @@ def render_session_markdown(session: dict[str, Any]) -> str:
             "  runtime_session.json",
             "  runtime_session.md",
             "  clarify.json",
+            "  attachments.json",
             "  refined_prompt.md",
             "  context_review.json",
             "  context_review.md",

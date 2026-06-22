@@ -26,6 +26,7 @@ def run_agent_preflight(
     mode: str = "fast",
     agent_command: str = "<agent command>",
     review_port: int = 8765,
+    image_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     if advance not in AGENT_PREFLIGHT_ADVANCES:
         raise ValueError(f"unknown agent preflight advance: {advance}")
@@ -37,7 +38,7 @@ def run_agent_preflight(
     if advance == "clarify":
         if not goal:
             raise ValueError("goal is required when advance=clarify")
-        action_result = start_runtime_session(root, goal, session_id=session_id, mode="standard")
+        action_result = start_runtime_session(root, goal, session_id=session_id, mode="standard", image_paths=image_paths)
         resolved_session_id = str(action_result["session_id"])
     elif advance == "context":
         if not session_id:

@@ -36,6 +36,30 @@ def test_clarify_writes_reviewable_prompt_without_doctor_access(tmp_path: Path) 
     assert not (tmp_path / "out" / "indexes").exists()
 
 
+def test_clarify_records_image_attachment_without_index_access(tmp_path: Path) -> None:
+    image_path = tmp_path / "resume.jpg"
+    image_path.write_bytes(b"not-a-real-image-but-enough-for-path-metadata")
+
+    result = build_clarification(
+        tmp_path / "out",
+        "我codex的项目和这个人的简历比起来有什么区别",
+        session_id="session-image",
+        image_paths=[str(image_path)],
+    )
+
+    attachments_path = Path(result["attachments_json_path"])
+    attachments = json.loads(attachments_path.read_text(encoding="utf-8"))
+    markdown = Path(result["refined_prompt_md_path"]).read_text(encoding="utf-8")
+
+    assert result["doctor_access"] is False
+    assert attachments[0]["path"] == str(image_path.resolve())
+    assert attachments[0]["source_type"] == "image"
+    assert "## Attachments" in markdown
+    assert str(image_path.resolve()) in markdown
+    assert not (tmp_path / "out" / "packs").exists()
+    assert not (tmp_path / "out" / "indexes").exists()
+
+
 def test_clarify_cli_does_not_call_resolver(tmp_path: Path, monkeypatch, capsys) -> None:
     def fail_if_called(*_args, **_kwargs) -> dict:
         raise AssertionError("clarify must not call resolver")

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .io import ensure_dir, write_text
+from .lab import describe_attachment
 from .pack import slugify
 
 
@@ -19,6 +20,7 @@ def build_clarification(
     *,
     session_id: str | None = None,
     mode: str = "standard",
+    image_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     root = Path(out_root).expanduser().resolve()
     normalized_goal = normalize_goal(goal)
@@ -27,6 +29,8 @@ def build_clarification(
     session_dir = ensure_dir(root / "runtime" / "sessions" / session)
     clarify_json_path = session_dir / "clarify.json"
     refined_prompt_path = session_dir / "refined_prompt.md"
+    attachments_json_path = session_dir / "attachments.json"
+    attachments = [describe_attachment(Path(value).expanduser()) for value in (image_paths or [])]
 
     profile = classify_goal(normalized_goal)
     clarification = {
@@ -46,6 +50,8 @@ def build_clarification(
         "source_scope_hint": profile["source_scope_hint"],
         "expected_output": profile["expected_output"],
         "evidence_need": profile["evidence_need"],
+        "attachments": attachments,
+        "attachments_json_path": str(attachments_json_path),
         "review_questions": review_questions(normalized_goal, profile),
         "refined_prompt": refined_prompt(normalized_goal, profile),
         "clarify_json_path": str(clarify_json_path),
@@ -53,6 +59,7 @@ def build_clarification(
     }
 
     write_text(clarify_json_path, json.dumps(clarification, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    write_text(attachments_json_path, json.dumps(attachments, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     write_text(refined_prompt_path, render_refined_prompt(clarification))
     return clarification
 
@@ -165,6 +172,10 @@ def render_refined_prompt(clarification: dict[str, Any]) -> str:
         "",
         clarification["original_goal"],
         "",
+        "## Attachments",
+        "",
+        *render_attachment_lines(clarification.get("attachments") or []),
+        "",
         "## Refined Prompt",
         "",
         clarification["refined_prompt"],
@@ -187,6 +198,25 @@ def render_refined_prompt(clarification: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def render_attachment_lines(attachments: list[dict[str, Any]]) -> list[str]:
+    if not attachments:
+        return ["- No attachments."]
+    lines: list[str] = []
+    for attachment in attachments:
+        path = str(attachment.get("path") or "")
+        name = str(attachment.get("name") or Path(path).name)
+        if attachment.get("source_type") == "image" and attachment.get("exists"):
+            lines.append(f"![{name}]({path})")
+        lines.append(f"- path: `{path}`")
+        lines.append(f"- status: `{attachment.get('status')}`")
+        if attachment.get("width") and attachment.get("height"):
+            lines.append(f"- size: `{attachment['width']}x{attachment['height']}`")
+        if attachment.get("sha256"):
+            lines.append(f"- sha256: `{attachment['sha256']}`")
+        lines.append("")
+    return lines[:-1] if lines and lines[-1] == "" else lines
 
 
 def clarify_next_command(clarification: dict[str, Any]) -> str:

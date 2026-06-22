@@ -39,6 +39,7 @@ def build_comparison_pack(
     run_id: str,
     user_text: str,
     input_md_path: Path,
+    input_markdown: str | None = None,
     attachments: list[dict[str, Any]],
     resume: dict[str, Any] | None,
     left_resolve_result: dict[str, Any],
@@ -54,7 +55,7 @@ def build_comparison_pack(
 
     right_source = resume_source_record(resume) if resume else missing_resume_source(attachments)
     right_source["slot"] = "right_resume"
-    ranked_left_sources = prioritize_left_sources(left_sources)
+    ranked_left_sources = filter_left_sources_for_comparison(left_sources, user_text)
     slotted_left = []
     for source in ranked_left_sources:
         copied = dict(source)
@@ -100,7 +101,7 @@ def build_comparison_pack(
     write_jsonl(sources_path, sources)
     write_text(plan_path, json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     write_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-    write_text(context_path, render_comparison_context(user_text, input_md_path, resume, slotted_left, plan))
+    write_text(context_path, render_comparison_context(user_text, input_md_path, resume, slotted_left, plan, input_markdown=input_markdown))
     return {
         "comparison_schema_version": COMPARISON_SCHEMA_VERSION,
         "task_id": task_id,
@@ -146,6 +147,44 @@ def prioritize_left_sources(left_sources: list[dict[str, Any]]) -> list[dict[str
     return sorted(left_sources, key=left_source_rank_key)
 
 
+def filter_left_sources_for_comparison(left_sources: list[dict[str, Any]], user_text: str) -> list[dict[str, Any]]:
+    ranked = prioritize_left_sources(left_sources)
+    lower = user_text.lower()
+    if "codex" not in lower and "doctor" not in lower:
+        return ranked
+    filtered = [source for source in ranked if is_codex_doctor_project_source(source)]
+    return filtered or ranked
+
+
+def is_codex_doctor_project_source(source: dict[str, Any]) -> bool:
+    text = " ".join(
+        str(source.get(key) or "")
+        for key in ("path", "relative_path", "source_id", "title", "snippet", "summary")
+    ).lower()
+    path = str(source.get("path") or "").lower()
+    strong_path_markers = (
+        "agent-context-system",
+        "codexplusplus",
+        "codex-plus",
+        "/doctor",
+        "adversarial-pixel-debate",
+        "recommendation-system",
+    )
+    if any(marker in path for marker in strong_path_markers):
+        return True
+    strong_text_markers = (
+        "context resolver",
+        "evidence db",
+        "hot pack",
+        "cold index",
+        "doctor runtime",
+        "codex++",
+        "codex exec",
+        "agent runtime",
+    )
+    return any(marker in text for marker in strong_text_markers)
+
+
 def left_source_rank_key(source: dict[str, Any]) -> tuple[float, float, str]:
     path = str(source.get("path") or "").lower()
     preferred = 0.0
@@ -170,11 +209,14 @@ def render_comparison_context(
     resume: dict[str, Any] | None,
     left_sources: list[dict[str, Any]],
     plan: dict[str, Any],
+    input_markdown: str | None = None,
 ) -> str:
-    lines = [
-        input_md_path.read_text(encoding="utf-8"),
-        "---",
-        "",
+    input_text = input_md_path.read_text(encoding="utf-8") if input_markdown is None else input_markdown
+    lines = []
+    if input_text.strip():
+        lines.extend([input_text.strip(), "---", ""])
+    lines.extend(
+        [
         "# Comparison Task",
         "",
         user_text,
@@ -186,7 +228,8 @@ def render_comparison_context(
         "",
         "## Right Slot: Resume Evidence",
         "",
-    ]
+        ]
+    )
     if resume:
         lines.append(resume.get("markdown") or "")
     else:

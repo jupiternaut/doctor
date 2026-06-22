@@ -112,12 +112,14 @@ def build_parser() -> argparse.ArgumentParser:
     clarify.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     clarify.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
     clarify.add_argument("--mode", choices=["fast", "standard"], default="standard", help="Clarification mode metadata.")
+    clarify.add_argument("--image", action="append", default=None, help="Attach an image path to the runtime session. Can be passed more than once.")
 
     doctor_run = subparsers.add_parser("run", help="Start a Doctor runtime session with no-index clarification.")
     doctor_run.add_argument("--goal", required=True, help="Original user task to normalize for review.")
     doctor_run.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     doctor_run.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
     doctor_run.add_argument("--mode", choices=["fast", "standard"], default="standard", help="Clarification mode metadata.")
+    doctor_run.add_argument("--image", action="append", default=None, help="Attach an image path to the runtime session. Can be passed more than once.")
 
     runtime_task = subparsers.add_parser("runtime-task", help="Start a one-shot Doctor task review session and export the review launch contract.")
     runtime_task.add_argument("--goal", required=True, help="Original user task to normalize for review.")
@@ -125,6 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_task.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
     runtime_task.add_argument("--host", default="127.0.0.1", help="Review server host for the launch contract.")
     runtime_task.add_argument("--port", type=int, default=8765, help="Review server port for the launch contract.")
+    runtime_task.add_argument("--image", action="append", default=None, help="Attach an image path to the runtime session. Can be passed more than once.")
 
     agent_preflight = subparsers.add_parser("agent-preflight", help="Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, or MCP clients.")
     agent_preflight.add_argument("--advance", choices=["clarify", "context", "handoff"], default="clarify", help="Runtime gate to advance: clarify, context, or handoff.")
@@ -141,6 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     agent_preflight.add_argument("--mode", choices=["fast", "deep", "arena"], default="fast", help="Context generation mode metadata.")
     agent_preflight.add_argument("--agent-command", default="<agent command>", help="Default command included in the runtime adapter package.")
     agent_preflight.add_argument("--review-port", type=int, default=8765, help="Local review server port included in generated adapter docs.")
+    agent_preflight.add_argument("--image", action="append", default=None, help="Attach an image path when --advance clarify starts a runtime session.")
 
     doctor_session = subparsers.add_parser("session", help="Inspect a Doctor runtime session and write DOCTOR_SESSION.md.")
     doctor_session.add_argument("--session-id", required=True, help="Runtime session id to inspect.")
@@ -713,9 +717,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "evidence-search":
         result = search_evidence_index(out_root, args.query, limit=max(1, args.limit))
     elif args.command == "clarify":
-        result = build_clarification(out_root, args.goal, session_id=args.session_id, mode=args.mode)
+        result = build_clarification(out_root, args.goal, session_id=args.session_id, mode=args.mode, image_paths=args.image or [])
     elif args.command == "run":
-        result = start_runtime_session(out_root, args.goal, session_id=args.session_id, mode=args.mode)
+        result = start_runtime_session(out_root, args.goal, session_id=args.session_id, mode=args.mode, image_paths=args.image or [])
     elif args.command == "runtime-task":
         try:
             result = start_runtime_task(
@@ -724,6 +728,7 @@ def main(argv: list[str] | None = None) -> int:
                 session_id=args.session_id,
                 host=args.host,
                 port=args.port,
+                image_paths=args.image or [],
             )
         except (FileNotFoundError, ValueError) as exc:
             print(
@@ -752,6 +757,7 @@ def main(argv: list[str] | None = None) -> int:
                 mode=args.mode,
                 agent_command=args.agent_command,
                 review_port=args.review_port,
+                image_paths=args.image or [],
             )
         except (FileNotFoundError, ValueError) as exc:
             print(

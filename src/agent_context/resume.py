@@ -60,6 +60,7 @@ def extract_resume_from_attachments(attachments: list[dict[str, Any]], run_dir: 
         "ocr": ocr_results,
         **parsed,
     }
+    resume["redacted_ocr_text"] = redact_resume_contact_info(resume.get("ocr_text") or "")
     resume["markdown"] = render_resume_markdown(resume)
 
     resume_json_path = run_dir / "resume.json"
@@ -263,6 +264,19 @@ def resume_limits(text: str) -> list[str]:
     return limits
 
 
+def redact_resume_contact_info(text: str) -> str:
+    redacted_lines: list[str] = []
+    for line in text.splitlines():
+        if any(marker in line.lower() for marker in ("电子邮箱", "联系电话", "邮箱", "电话", "email", "e-mail")):
+            label = re.split(r"[:：]", line, maxsplit=1)[0].strip() or "contact"
+            redacted_lines.append(f"{label}：[REDACTED_CONTACT]")
+            continue
+        line = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "[REDACTED_EMAIL]", line)
+        line = re.sub(r"(?<!\d)(?:\+?86[- ]?)?1[3-9]\d[ -]?\d{4}[ -]?\d{4}(?!\d)", "[REDACTED_PHONE]", line)
+        redacted_lines.append(line)
+    return "\n".join(redacted_lines)
+
+
 def render_resume_markdown(resume: dict[str, Any]) -> str:
     lines = [
         "# Resume OCR Evidence",
@@ -278,7 +292,7 @@ def render_resume_markdown(resume: dict[str, Any]) -> str:
     lines.extend(f"- {line}" for line in resume.get("education") or ["No education lines extracted."])
     lines.extend(["", "## Projects", ""])
     lines.extend(f"- {line}" for line in resume.get("projects") or ["No project lines extracted."])
-    lines.extend(["", "## OCR Text", "", "```text", resume.get("ocr_text") or "", "```", ""])
+    lines.extend(["", "## OCR Text", "", "```text", resume.get("redacted_ocr_text") or resume.get("ocr_text") or "", "```", ""])
     if resume.get("limits"):
         lines.extend(["## Limits", ""])
         lines.extend(f"- {limit}" for limit in resume["limits"])
@@ -300,7 +314,7 @@ def resume_source_record(resume: dict[str, Any]) -> dict[str, Any]:
         "title": "Resume OCR Evidence",
         "summary": f"target_role={resume.get('target_role') or 'unknown'}; technologies={', '.join(resume.get('technologies') or [])}",
         "snippet": resume.get("markdown", "")[:1800],
-        "text": resume.get("ocr_text") or "",
+        "text": resume.get("redacted_ocr_text") or resume.get("ocr_text") or "",
         "source_type": "document",
         "score": 1.0 if resume.get("ocr_text") else 0.2,
         "metadata": {

@@ -21,6 +21,7 @@ def start_runtime_task(
     session_id: str | None = None,
     host: str = "127.0.0.1",
     port: int = 8765,
+    image_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     root = Path(out_root).expanduser().resolve()
     preflight = run_agent_preflight(
@@ -28,6 +29,7 @@ def start_runtime_task(
         advance="clarify",
         goal=goal,
         session_id=session_id,
+        image_paths=image_paths,
     )
     resolved_session_id = str(preflight["session_id"])
     launch = export_runtime_review_launch(root, resolved_session_id, host=host, port=max(1, int(port)))

@@ -6,9 +6,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .codex_hook import build_codex_preflight
-from .io import append_jsonl, ensure_dir, write_text
+from .codex_hook import build_codex_preflight, finalize_preflight
+from .comparison import build_comparison_pack, left_goal_for_comparison
+from .io import append_jsonl, ensure_dir, read_jsonl, write_text
 from .pack import slugify
+from .resolver import resolve_context
+from .resume import extract_resume_from_attachments
 
 
 CONTEXT_REVIEW_VERSION = "0.1"
@@ -59,14 +62,26 @@ def generate_context_review(
     retrieval_goal = extract_retrieval_goal(refined_prompt)
     session = session_id or session_id_from_refined_prompt_path(root, prompt_path) or f"session-{slugify(refined_prompt)}"
     session_dir = ensure_dir(root / "runtime" / "sessions" / session)
-    preflight = build_codex_preflight(
-        root,
-        refined_prompt,
-        source_scope=source_scope,
-        limit=limit,
-        mode=mode,
-        retrieval_goal=retrieval_goal,
-    )
+    if is_runtime_comparison_task(refined_prompt, retrieval_goal):
+        preflight = build_comparison_preflight(
+            root,
+            refined_prompt=refined_prompt,
+            retrieval_goal=retrieval_goal,
+            prompt_path=prompt_path,
+            session_id=session,
+            source_scope=source_scope,
+            limit=limit,
+            mode=mode,
+        )
+    else:
+        preflight = build_codex_preflight(
+            root,
+            refined_prompt,
+            source_scope=source_scope,
+            limit=limit,
+            mode=mode,
+            retrieval_goal=retrieval_goal,
+        )
     review = {
         "context_review_version": CONTEXT_REVIEW_VERSION,
         "stage": "resolve_review",
@@ -89,6 +104,88 @@ def generate_context_review(
     }
     persist_context_review(root, review, event_action=action, event_reason=reason)
     return review
+
+
+def is_runtime_comparison_task(refined_prompt: str, retrieval_goal: str) -> bool:
+    text = f"{retrieval_goal}\n{refined_prompt}"
+    lower = text.lower()
+    has_compare = any(marker in text or marker in lower for marker in ("比较", "区别", "对比", "比起来", "差异", "compare", " vs "))
+    has_resume = "简历" in text or "resume" in lower
+    return has_compare and has_resume
+
+
+def build_comparison_preflight(
+    root: Path,
+    *,
+    refined_prompt: str,
+    retrieval_goal: str,
+    prompt_path: Path,
+    session_id: str,
+    source_scope: str,
+    limit: int,
+    mode: str,
+) -> dict[str, Any]:
+    session_dir = ensure_dir(root / "runtime" / "sessions" / session_id)
+    attachments = load_session_attachments(root, session_id)
+    resume = extract_resume_from_attachments(attachments, session_dir) if attachments else None
+    left_resolve = resolve_context(
+        root,
+        left_goal_for_comparison(retrieval_goal),
+        limit=max(1, int(limit)),
+        source_scope=source_scope,
+    )
+    left_sources = read_jsonl(Path(str(left_resolve["sources_jsonl_path"])))
+    comparison = build_comparison_pack(
+        root,
+        run_id=session_id,
+        user_text=retrieval_goal,
+        input_md_path=prompt_path,
+        input_markdown="",
+        attachments=attachments,
+        resume=resume,
+        left_resolve_result=left_resolve,
+        left_sources=left_sources,
+    )
+    paths = {
+        "context_md_path": comparison["context_md_path"],
+        "sources_jsonl_path": comparison["sources_jsonl_path"],
+        "manifest_json_path": comparison["manifest_json_path"],
+        "resolution_plan_json_path": comparison["comparison_plan_json_path"],
+    }
+    preflight = {
+        "codex_preflight_version": "0.1",
+        "auto_context": True,
+        "mode": mode if mode in {"fast", "deep", "arena"} else "fast",
+        "requested_mode": mode,
+        "goal": refined_prompt,
+        "retrieval_goal": retrieval_goal,
+        "source_scope": source_scope,
+        "limit": max(1, int(limit)),
+        "out_root": str(root),
+        "status": "ok",
+        "resolver_version": left_resolve.get("resolver_version"),
+        "route": "comparison_slots_v0",
+        "task_id": comparison["task_id"],
+        "intent": "comparison",
+        "selected_sources": left_resolve.get("selected_sources", []),
+        "queries": left_resolve.get("queries", []),
+        "sources_included": comparison["sources_included"],
+        "attachments_included": len(attachments),
+        "comparison_plan_json_path": comparison["comparison_plan_json_path"],
+        "paths": paths,
+        **paths,
+    }
+    return finalize_preflight(root, preflight)
+
+
+def load_session_attachments(root: Path, session_id: str) -> list[dict[str, Any]]:
+    path = root / "runtime" / "sessions" / session_id / "attachments.json"
+    if not path.exists():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
 
 
 def record_context_review_decision(root: Path, *, action: str, session_id: str | None, reason: str) -> dict[str, Any]:

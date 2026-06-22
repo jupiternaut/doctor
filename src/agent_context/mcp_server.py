@@ -148,11 +148,12 @@ def mcp_doctor_run(
     goal: str,
     session_id: str | None = None,
     mode: str = "standard",
+    image_paths: list[str] | None = None,
     out_root: str | None = None,
 ) -> dict[str, Any]:
     return {
         "mcp_version": MCP_VERSION,
-        **start_runtime_session(resolve_out_root(out_root), goal, session_id=session_id, mode=mode),
+        **start_runtime_session(resolve_out_root(out_root), goal, session_id=session_id, mode=mode, image_paths=image_paths),
     }
 
 
@@ -161,6 +162,7 @@ def mcp_doctor_runtime_task(
     session_id: str | None = None,
     host: str = "127.0.0.1",
     port: int = 8765,
+    image_paths: list[str] | None = None,
     out_root: str | None = None,
 ) -> dict[str, Any]:
     try:
@@ -172,6 +174,7 @@ def mcp_doctor_runtime_task(
                 session_id=session_id,
                 host=host,
                 port=max(1, port),
+                image_paths=image_paths,
             ),
         }
     except (FileNotFoundError, ValueError) as exc:
@@ -187,6 +190,7 @@ def mcp_doctor_agent_preflight(
     mode: str = "fast",
     agent_command: str = "<agent command>",
     review_port: int = 8765,
+    image_paths: list[str] | None = None,
     out_root: str | None = None,
 ) -> dict[str, Any]:
     try:
@@ -202,6 +206,7 @@ def mcp_doctor_agent_preflight(
                 mode=mode,
                 agent_command=agent_command,
                 review_port=max(1, review_port),
+                image_paths=image_paths,
             ),
         }
     except (FileNotFoundError, ValueError) as exc:
@@ -1469,9 +1474,14 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
         return mcp_resolve_context(goal=goal, limit=limit, source_scope=source_scope, out_root=str(root))
 
     @server.tool()
-    def doctor_run(goal: str, session_id: str | None = None, mode: str = "standard") -> dict[str, Any]:
+    def doctor_run(
+        goal: str,
+        session_id: str | None = None,
+        mode: str = "standard",
+        image_paths: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Start a Doctor runtime session with no-index clarification."""
-        return mcp_doctor_run(goal=goal, session_id=session_id, mode=mode, out_root=str(root))
+        return mcp_doctor_run(goal=goal, session_id=session_id, mode=mode, image_paths=image_paths, out_root=str(root))
 
     @server.tool()
     def doctor_runtime_task(
@@ -1479,6 +1489,7 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
         session_id: str | None = None,
         host: str = "127.0.0.1",
         port: int = 8765,
+        image_paths: list[str] | None = None,
     ) -> dict[str, Any]:
         """Start a one-shot Doctor task review session and export the review launch contract."""
         return mcp_doctor_runtime_task(
@@ -1486,6 +1497,7 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
             session_id=session_id,
             host=host,
             port=port,
+            image_paths=image_paths,
             out_root=str(root),
         )
 
@@ -1499,6 +1511,7 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
         mode: str = "fast",
         agent_command: str = "<agent command>",
         review_port: int = 8765,
+        image_paths: list[str] | None = None,
     ) -> dict[str, Any]:
         """Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, and MCP clients."""
         return mcp_doctor_agent_preflight(
@@ -1510,6 +1523,7 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
             mode=mode,
             agent_command=agent_command,
             review_port=review_port,
+            image_paths=image_paths,
             out_root=str(root),
         )
 

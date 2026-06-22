@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_context.resume import parse_resume_text, render_resume_markdown
+from agent_context.resume import parse_resume_text, redact_resume_contact_info, render_resume_markdown
 
 
 def test_parse_resume_text_extracts_role_technologies_and_projects() -> None:
@@ -25,3 +25,20 @@ def test_parse_resume_text_extracts_role_technologies_and_projects() -> None:
 
     assert "AI 应用实习生" in markdown
     assert "Sentence-Transformers" in markdown
+
+
+def test_redact_resume_contact_info_removes_email_and_phone() -> None:
+    text = "\n".join(
+        [
+            "电子邮箱：31512377325@qq.com",
+            "联系电话：15570011267",
+            "项目二：双模式 RAG 智能问答系统",
+        ]
+    )
+
+    redacted = redact_resume_contact_info(text)
+
+    assert "31512377325@qq.com" not in redacted
+    assert "15570011267" not in redacted
+    assert "[REDACTED_CONTACT]" in redacted
+    assert "双模式 RAG" in redacted
