@@ -7,6 +7,7 @@ from pathlib import Path
 from .access_policy import load_access_policy, read_access_audit, update_access_policy, write_default_access_policy
 from .acceptance import run_v1_acceptance, run_v1_followup, run_v1_refresh, run_v1_stage_status
 from .alternatives import resolve_alternative_context
+from .answer_review import run_answer_review
 from .arena import build_arena, record_feedback
 from .clarify import build_clarification
 from .codex_hook import build_codex_preflight
@@ -169,6 +170,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Restrict resolver source families for generate/regenerate.",
     )
     context_review.add_argument("--mode", choices=["fast", "deep", "arena"], default="fast", help="Preflight mode for generate/regenerate.")
+
+    answer_review = subparsers.add_parser("answer-review", help="Prepare, record, or review an answer from an approved Doctor model input.")
+    answer_review.add_argument("--action", choices=["prepare", "record", "approve", "reject"], default="prepare", help="Answer review action.")
+    answer_review.add_argument("--session-id", required=True, help="Runtime session id.")
+    answer_review.add_argument("--answer-text", default="", help="Inline answer text for --action record.")
+    answer_review.add_argument("--answer-file", default=None, help="Path to answer Markdown/text for --action record.")
+    answer_review.add_argument("--reason", default="", help="Optional preparation or review reason.")
+    answer_review.add_argument("--out", default=None, help="Output root. Overrides global --out.")
 
     panel = subparsers.add_parser("panel", help="Write Context Panel status JSON and a local HTML panel.")
     panel.add_argument("--goal", default=None, help="Optional task goal; when provided, run Codex preflight before writing panel status.")
@@ -660,6 +669,32 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
             mode=args.mode,
         )
+    elif args.command == "answer-review":
+        try:
+            result = run_answer_review(
+                out_root,
+                action=args.action,
+                session_id=args.session_id,
+                answer_text=args.answer_text,
+                answer_file=args.answer_file,
+                reason=args.reason,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "command": "answer-review",
+                        "action": args.action,
+                        "session_id": args.session_id,
+                        "error": str(exc),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 1
     elif args.command == "panel":
         result = build_context_panel(
             out_root,

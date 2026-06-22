@@ -178,6 +178,43 @@ Approve/reject events append to `feedback/context_review_feedback.jsonl`.
 `regenerate` reruns `codex-preflight` from the same `refined_prompt.md` after
 changing scope, mode, or limit.
 
+Stage 3 prepares and reviews the actual answer. It refuses to run until
+`context_review.json` is approved:
+
+```bash
+agent-context answer-review \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --action prepare
+```
+
+It writes:
+
+```text
+runtime/sessions/<session-id>/answer_review.json
+runtime/sessions/<session-id>/answer_packet.md
+runtime/sessions/<session-id>/answer_review_events.jsonl
+```
+
+`answer_packet.md` is the approved context handoff for Codex++, Warp, or Doctor.
+After an agent produces an answer, record and review it:
+
+```bash
+agent-context answer-review \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --action record \
+  --answer-file /path/to/answer.md
+
+agent-context answer-review \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --action approve \
+  --reason "answer matches intent"
+```
+
+Approve/reject events append to `feedback/answer_review_feedback.jsonl`.
+
 ## Fixture Validation
 
 ```bash
