@@ -191,6 +191,14 @@ def mcp_doctor_agent_preflight(
     agent_command: str = "<agent command>",
     review_port: int = 8765,
     image_paths: list[str] | None = None,
+    answer_command: str = "",
+    answer_text: str = "",
+    answer_file: str | None = None,
+    execution_command: str = "",
+    artifact_file: str | None = None,
+    cwd: str | None = None,
+    timeout_seconds: int = 120,
+    reason: str = "",
     out_root: str | None = None,
 ) -> dict[str, Any]:
     try:
@@ -207,6 +215,14 @@ def mcp_doctor_agent_preflight(
                 agent_command=agent_command,
                 review_port=max(1, review_port),
                 image_paths=image_paths,
+                answer_command=answer_command,
+                answer_text=answer_text,
+                answer_file=answer_file,
+                execution_command=execution_command,
+                artifact_file=artifact_file,
+                cwd=cwd,
+                timeout_seconds=max(1, timeout_seconds),
+                reason=reason,
             ),
         }
     except (FileNotFoundError, ValueError) as exc:
@@ -1512,6 +1528,14 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
         agent_command: str = "<agent command>",
         review_port: int = 8765,
         image_paths: list[str] | None = None,
+        answer_command: str = "",
+        answer_text: str = "",
+        answer_file: str | None = None,
+        execution_command: str = "",
+        artifact_file: str | None = None,
+        cwd: str | None = None,
+        timeout_seconds: int = 120,
+        reason: str = "",
     ) -> dict[str, Any]:
         """Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, and MCP clients."""
         return mcp_doctor_agent_preflight(
@@ -1524,6 +1548,14 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
             agent_command=agent_command,
             review_port=review_port,
             image_paths=image_paths,
+            answer_command=answer_command,
+            answer_text=answer_text,
+            answer_file=answer_file,
+            execution_command=execution_command,
+            artifact_file=artifact_file,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            reason=reason,
             out_root=str(root),
         )
 

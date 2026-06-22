@@ -221,7 +221,9 @@ doctor agent-preflight \
 ```
 
 After the user approves `model_input.md`, export the approved model handoff and
-client adapter package:
+client adapter package. The same high-level entrypoint can then advance the
+answer and execution gates, so Codex++/Warp/Doctor do not need to call low-level
+stage tools directly:
 
 ```bash
 doctor agent-preflight \
@@ -229,6 +231,19 @@ doctor agent-preflight \
   --advance handoff \
   --session-id <session-id> \
   --agent-command "<agent command>"
+
+doctor agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --advance answer \
+  --session-id <session-id> \
+  --answer-command "<agent command>"
+
+doctor agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --advance execution \
+  --session-id <session-id> \
+  --execution-command "python scripts/build_report.py" \
+  --cwd /Users/gengrf/agent-context-system
 ```
 
 Stage 1 is a no-index clarification pass. It normalizes the user's natural
@@ -316,9 +331,21 @@ agent-context runtime-adapter \
 It writes `runtime/sessions/<session-id>/adapters/adapter_manifest.json` plus
 client-facing Markdown and shell helper files.
 
-Stage 3 prepares and reviews the actual answer. The formal runtime flow exports
-the adapter package before this step; `answer-review` itself refuses to run until
-`context_review.json` is approved and `agent_handoff.md` exists:
+Stage 3 prepares and reviews the actual answer. Preferred client path:
+
+```bash
+agent-context agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --advance answer \
+  --answer-command "<agent command>"
+```
+
+`agent-preflight --advance answer` ensures the approved handoff and adapter
+exist, prepares `answer_packet.md` when needed, and can run a local answer
+command with the packet on stdin. The lower-level `answer-review` command is
+still available and refuses to run until `context_review.json` is approved and
+`agent_handoff.md` exists:
 
 ```bash
 agent-context answer-review \
@@ -369,7 +396,20 @@ agent-context answer-review \
 
 Approve/reject events append to `feedback/answer_review_feedback.jsonl`.
 
-Stage 4 runs local programs only after the recorded answer is approved:
+Stage 4 runs local programs only after the recorded answer is approved.
+Preferred client path:
+
+```bash
+agent-context agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --advance execution \
+  --execution-command "python scripts/build_report.py" \
+  --cwd /Users/gengrf/agent-context-system
+```
+
+The lower-level execution tool remains available for explicit local commands or
+externally generated artifacts:
 
 ```bash
 agent-context execution-review \

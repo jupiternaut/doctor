@@ -130,7 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_task.add_argument("--image", action="append", default=None, help="Attach an image path to the runtime session. Can be passed more than once.")
 
     agent_preflight = subparsers.add_parser("agent-preflight", help="Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, or MCP clients.")
-    agent_preflight.add_argument("--advance", choices=["clarify", "context", "handoff"], default="clarify", help="Runtime gate to advance: clarify, context, or handoff.")
+    agent_preflight.add_argument(
+        "--advance",
+        choices=["clarify", "context", "handoff", "answer", "execution"],
+        default="clarify",
+        help="Runtime gate to advance: clarify, context, handoff, answer, or execution.",
+    )
     agent_preflight.add_argument("--goal", default=None, help="Original user task. Required for --advance clarify.")
     agent_preflight.add_argument("--session-id", default=None, help="Runtime session id. Required after clarify.")
     agent_preflight.add_argument("--out", default=None, help="Output root. Overrides global --out.")
@@ -145,6 +150,14 @@ def build_parser() -> argparse.ArgumentParser:
     agent_preflight.add_argument("--agent-command", default="<agent command>", help="Default command included in the runtime adapter package.")
     agent_preflight.add_argument("--review-port", type=int, default=8765, help="Local review server port included in generated adapter docs.")
     agent_preflight.add_argument("--image", action="append", default=None, help="Attach an image path when --advance clarify starts a runtime session.")
+    agent_preflight.add_argument("--answer-command", default="", help="Command to run when --advance answer should produce an answer. The answer packet is passed on stdin.")
+    agent_preflight.add_argument("--answer-text", default="", help="Inline answer text to record when --advance answer.")
+    agent_preflight.add_argument("--answer-file", default=None, help="Answer file to record when --advance answer.")
+    agent_preflight.add_argument("--execution-command", default="", help="Command to run when --advance execution should produce local artifacts.")
+    agent_preflight.add_argument("--artifact-file", default=None, help="Artifact file to record when --advance execution.")
+    agent_preflight.add_argument("--cwd", default=None, help="Working directory for --answer-command or --execution-command.")
+    agent_preflight.add_argument("--timeout-seconds", type=int, default=120, help="Maximum seconds for answer/execution commands.")
+    agent_preflight.add_argument("--reason", default="", help="Optional reason recorded on answer/execution review events.")
 
     doctor_session = subparsers.add_parser("session", help="Inspect a Doctor runtime session and write DOCTOR_SESSION.md.")
     doctor_session.add_argument("--session-id", required=True, help="Runtime session id to inspect.")
@@ -758,6 +771,14 @@ def main(argv: list[str] | None = None) -> int:
                 agent_command=args.agent_command,
                 review_port=args.review_port,
                 image_paths=args.image or [],
+                answer_command=args.answer_command,
+                answer_text=args.answer_text,
+                answer_file=args.answer_file,
+                execution_command=args.execution_command,
+                artifact_file=args.artifact_file,
+                cwd=args.cwd,
+                timeout_seconds=args.timeout_seconds,
+                reason=args.reason,
             )
         except (FileNotFoundError, ValueError) as exc:
             print(

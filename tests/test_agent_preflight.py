@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
+from agent_context.answer_review import run_answer_review
 from agent_context.agent_preflight import run_agent_preflight
 from agent_context.cli import main
 from agent_context.mcp_server import mcp_doctor_agent_preflight
@@ -124,6 +126,52 @@ def test_agent_preflight_handoff_exports_adapter_after_context_approval(tmp_path
     assert Path(result["agent_handoff"]["agent_handoff_md_path"]).exists()
     assert Path(result["runtime_adapter"]["manifest"]).exists()
     assert result["runtime_adapter"]["targets"] == ["codex-plus", "warp", "codex-cli", "mcp"]
+
+
+def test_agent_preflight_advances_answer_and_execution_gates(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    start_runtime_session(out, "完整四阶段运行时", session_id="agent-preflight-full")
+    review = write_fake_context_review(out, "agent-preflight-full")
+    review["status"] = "approved"
+    Path(review["context_review_json_path"]).write_text(json.dumps(review, ensure_ascii=False), encoding="utf-8")
+
+    answer_command = f"{sys.executable} -c \"import sys; sys.stdin.read(); print('answer from agent preflight')\""
+    answered = run_agent_preflight(
+        out,
+        advance="answer",
+        session_id="agent-preflight-full",
+        agent_command=answer_command,
+        answer_command=answer_command,
+        cwd=tmp_path,
+        timeout_seconds=10,
+        reason="answer via preflight",
+    )
+
+    assert answered["status"] == "awaiting_answer_review"
+    assert Path(out / "runtime" / "sessions" / "agent-preflight-full" / "agent_handoff.md").exists()
+    assert Path(out / "runtime" / "sessions" / "agent-preflight-full" / "adapters" / "adapter_manifest.json").exists()
+    assert answered["action_result"]["answer_md_path"].endswith("answer.md")
+    assert "answer from agent preflight" in Path(out / "runtime" / "sessions" / "agent-preflight-full" / "answer.md").read_text(encoding="utf-8")
+
+    run_answer_review(out, action="approve", session_id="agent-preflight-full", reason="answer accepted")
+    execution_command = f"{sys.executable} -c \"print('execution from agent preflight')\""
+    executed = run_agent_preflight(
+        out,
+        advance="execution",
+        session_id="agent-preflight-full",
+        execution_command=execution_command,
+        cwd=tmp_path,
+        timeout_seconds=10,
+        reason="execution via preflight",
+    )
+
+    assert executed["status"] == "awaiting_execution_review"
+    assert executed["action_result"]["execution_report_md_path"].endswith("execution_report.md")
+    artifacts = out / "runtime" / "sessions" / "agent-preflight-full" / "execution_artifacts.jsonl"
+    assert artifacts.exists()
+    stdout_record = next(record for record in artifacts.read_text(encoding="utf-8").splitlines() if '"role": "stdout"' in record)
+    stdout_path = json.loads(stdout_record)["path"]
+    assert Path(stdout_path).read_text(encoding="utf-8").strip() == "execution from agent preflight"
 
 
 def test_agent_preflight_cli_requires_goal_for_clarify(tmp_path: Path, capsys) -> None:

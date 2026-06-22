@@ -5,14 +5,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .answer_review import run_answer_review
 from .context_review import run_context_review
+from .execution_review import run_execution_review
 from .io import write_text
 from .runtime_adapters import export_runtime_adapter_package
 from .runtime_vm import export_runtime_handoff, inspect_runtime_session, start_runtime_session
 
 
 AGENT_PREFLIGHT_VERSION = "0.1"
-AGENT_PREFLIGHT_ADVANCES = {"clarify", "context", "handoff"}
+AGENT_PREFLIGHT_ADVANCES = {"clarify", "context", "handoff", "answer", "execution"}
 
 
 def run_agent_preflight(
@@ -27,6 +29,14 @@ def run_agent_preflight(
     agent_command: str = "<agent command>",
     review_port: int = 8765,
     image_paths: list[str] | None = None,
+    answer_command: str = "",
+    answer_text: str = "",
+    answer_file: str | Path | None = None,
+    execution_command: str = "",
+    artifact_file: str | Path | None = None,
+    cwd: str | Path | None = None,
+    timeout_seconds: int = 120,
+    reason: str = "",
 ) -> dict[str, Any]:
     if advance not in AGENT_PREFLIGHT_ADVANCES:
         raise ValueError(f"unknown agent preflight advance: {advance}")
@@ -52,7 +62,7 @@ def run_agent_preflight(
             mode=mode,
         )
         resolved_session_id = session_id
-    else:
+    elif advance == "handoff":
         if not session_id:
             raise ValueError("session_id is required when advance=handoff")
         handoff = export_runtime_handoff(root, session_id)
@@ -63,6 +73,39 @@ def run_agent_preflight(
             review_port=review_port,
         )
         action_result = {"handoff": summarize_handoff(handoff), "adapter": summarize_adapter(adapter)}
+        resolved_session_id = session_id
+    elif advance == "answer":
+        if not session_id:
+            raise ValueError("session_id is required when advance=answer")
+        handoff, adapter = ensure_handoff_and_adapter(
+            root,
+            session_id,
+            agent_command=agent_command,
+            review_port=review_port,
+        )
+        action_result = advance_answer_gate(
+            root,
+            session_id=session_id,
+            answer_command=answer_command,
+            answer_text=answer_text,
+            answer_file=answer_file,
+            cwd=cwd,
+            timeout_seconds=max(1, int(timeout_seconds)),
+            reason=reason,
+        )
+        resolved_session_id = session_id
+    else:
+        if not session_id:
+            raise ValueError("session_id is required when advance=execution")
+        action_result = advance_execution_gate(
+            root,
+            session_id=session_id,
+            execution_command=execution_command,
+            artifact_file=artifact_file,
+            cwd=cwd,
+            timeout_seconds=max(1, int(timeout_seconds)),
+            reason=reason,
+        )
         resolved_session_id = session_id
 
     session = inspect_runtime_session(root, resolved_session_id)
@@ -79,6 +122,114 @@ def run_agent_preflight(
     )
     persist_agent_preflight(result)
     return result
+
+
+def ensure_handoff_and_adapter(
+    root: Path,
+    session_id: str,
+    *,
+    agent_command: str,
+    review_port: int,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    session_dir = root / "runtime" / "sessions" / session_id
+    context_path = session_dir / "context_review.json"
+    if not context_path.exists():
+        return None, None
+    context_review = json.loads(context_path.read_text(encoding="utf-8"))
+    if context_review.get("status") != "approved":
+        return None, None
+    handoff = None
+    adapter = None
+    if not (session_dir / "agent_handoff.md").exists():
+        handoff = export_runtime_handoff(root, session_id)
+    if not (session_dir / "adapters" / "adapter_manifest.json").exists():
+        adapter = export_runtime_adapter_package(
+            root,
+            session_id,
+            agent_command=agent_command,
+            review_port=review_port,
+        )
+    return handoff, adapter
+
+
+def advance_answer_gate(
+    root: Path,
+    *,
+    session_id: str,
+    answer_command: str,
+    answer_text: str,
+    answer_file: str | Path | None,
+    cwd: str | Path | None,
+    timeout_seconds: int,
+    reason: str,
+) -> dict[str, Any]:
+    if answer_file or answer_text.strip():
+        return run_answer_review(
+            root,
+            action="record",
+            session_id=session_id,
+            answer_text=answer_text,
+            answer_file=answer_file,
+            reason=reason,
+        )
+    if answer_command.strip():
+        return run_answer_review(
+            root,
+            action="run",
+            session_id=session_id,
+            command=answer_command,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            reason=reason,
+        )
+    session = inspect_runtime_session(root, session_id)
+    if session["status"] == "ready_for_answer_prepare":
+        return run_answer_review(root, action="prepare", session_id=session_id, reason=reason)
+    return {
+        "status": session["status"],
+        "stage": "answer_review",
+        "session_id": session_id,
+        "message": session["next"].get("message"),
+    }
+
+
+def advance_execution_gate(
+    root: Path,
+    *,
+    session_id: str,
+    execution_command: str,
+    artifact_file: str | Path | None,
+    cwd: str | Path | None,
+    timeout_seconds: int,
+    reason: str,
+) -> dict[str, Any]:
+    if artifact_file:
+        return run_execution_review(
+            root,
+            action="record",
+            session_id=session_id,
+            artifact_file=artifact_file,
+            reason=reason,
+        )
+    if execution_command.strip():
+        return run_execution_review(
+            root,
+            action="run",
+            session_id=session_id,
+            command=execution_command,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            reason=reason,
+        )
+    session = inspect_runtime_session(root, session_id)
+    if session["status"] == "ready_for_execution_prepare":
+        return run_execution_review(root, action="prepare", session_id=session_id, reason=reason)
+    return {
+        "status": session["status"],
+        "stage": "execute_review",
+        "session_id": session_id,
+        "message": session["next"].get("message"),
+    }
 
 
 def build_agent_preflight_result(
@@ -137,6 +288,13 @@ def summarize_action_result(action_result: dict[str, Any] | None) -> dict[str, A
         "context_review_json_path": action_result.get("context_review_json_path"),
         "context_review_md_path": action_result.get("context_review_md_path"),
         "refined_prompt_md_path": action_result.get("refined_prompt_md_path"),
+        "answer_review_json_path": action_result.get("answer_review_json_path"),
+        "answer_packet_md_path": action_result.get("answer_packet_md_path"),
+        "answer_md_path": action_result.get("answer_md_path"),
+        "execution_review_json_path": action_result.get("execution_review_json_path"),
+        "execution_report_md_path": action_result.get("execution_report_md_path"),
+        "artifact_manifest_jsonl_path": action_result.get("artifact_manifest_jsonl_path"),
+        "artifact_index_md_path": action_result.get("artifact_index_md_path"),
         "agent_handoff_md_path": (action_result.get("handoff") or {}).get("agent_handoff_md_path"),
         "runtime_adapter_manifest_json_path": (action_result.get("adapter") or {}).get("manifest"),
     }
@@ -181,15 +339,28 @@ def client_contract_for(session: dict[str, Any]) -> dict[str, Any]:
     elif status in {"ready_for_agent_handoff", "ready_for_runtime_adapter", "ready_for_answer_prepare", "awaiting_answer_output"}:
         instruction = "Use only the approved model_input.md or agent_handoff.md as the local evidence payload for the model."
         safe_to_send_model = True
+    elif status == "awaiting_answer_review":
+        instruction = "Show answer.md to the user. Do not prepare local execution until the user approves the answer."
+        safe_to_send_model = False
+    elif status in {"ready_for_execution_prepare", "awaiting_execution", "awaiting_execution_review", "execution_rejected"}:
+        instruction = "Use the approved answer only for the explicit execution gate. Do not run extra local commands outside Doctor execution review."
+        safe_to_send_model = False
+    elif status == "complete":
+        instruction = "All four Doctor review gates are approved. Use execution artifacts as the final reviewed output."
+        safe_to_send_model = False
     else:
         instruction = "Follow the current Doctor review gate before advancing."
-        safe_to_send_model = status in {"answer_pending_review", "answer_approved", "ready_for_execution_prepare", "awaiting_execution_output"}
+        safe_to_send_model = False
     return {
         "instruction": instruction,
         "safe_to_send_model": safe_to_send_model,
         "current_review_file": next_state.get("review_file"),
         "approved_model_input_md_path": files.get("model_input_md_path") if safe_to_send_model else "",
         "agent_handoff_md_path": files.get("agent_handoff_md_path") if safe_to_send_model else "",
+        "answer_packet_md_path": files.get("answer_packet_md_path") or "",
+        "answer_md_path": files.get("answer_md_path") or "",
+        "execution_report_md_path": files.get("execution_report_md_path") or "",
+        "execution_artifact_index_md_path": files.get("execution_artifact_index_md_path") or "",
     }
 
 
@@ -224,6 +395,10 @@ def render_agent_preflight_markdown(result: dict[str, Any]) -> str:
         f"- Current review file: `{contract.get('current_review_file')}`",
         f"- Approved model input: `{contract.get('approved_model_input_md_path')}`",
         f"- Agent handoff: `{contract.get('agent_handoff_md_path')}`",
+        f"- Answer packet: `{contract.get('answer_packet_md_path')}`",
+        f"- Answer: `{contract.get('answer_md_path')}`",
+        f"- Execution report: `{contract.get('execution_report_md_path')}`",
+        f"- Execution artifacts: `{contract.get('execution_artifact_index_md_path')}`",
         "",
         "## Runtime Files",
         "",
