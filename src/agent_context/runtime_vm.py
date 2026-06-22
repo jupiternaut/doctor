@@ -87,6 +87,7 @@ def run_runtime_vm_acceptance(out_root: str | Path, session_id: str) -> dict[str
         "checks": checks,
         "mcp_tools": [
             "doctor_run",
+            "doctor_agent_preflight",
             "doctor_session",
             "doctor_runtime_acceptance",
             "doctor_runtime_handoff",

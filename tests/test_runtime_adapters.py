@@ -41,7 +41,8 @@ def test_runtime_adapter_package_exports_target_files(tmp_path: Path) -> None:
     assert Path(manifest["adapter_files"]["mcp_doc"]).exists()
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert data["entrypoints"]["inspect"].startswith("doctor session")
-    assert data["mcp_tool_sequence"][0]["tool"] == "doctor_session"
+    assert data["entrypoints"]["agent_preflight_context"].startswith("doctor agent-preflight")
+    assert data["mcp_tool_sequence"][0]["tool"] == "doctor_agent_preflight"
     assert "Doctor Runtime Adapter" in overview_path.read_text(encoding="utf-8")
 
 

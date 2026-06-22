@@ -97,6 +97,9 @@ def normalize_targets(targets: list[str] | None) -> list[str]:
 def adapter_entrypoints(root: Path, session_id: str, *, agent_command: str, review_port: int) -> dict[str, str]:
     return {
         "inspect": doctor_command(root, "session", "--session-id", session_id),
+        "agent_preflight_clarify": doctor_command(root, "agent-preflight", "--session-id", session_id, "--advance", "clarify", "--goal", quote_arg("<user task>")),
+        "agent_preflight_context": doctor_command(root, "agent-preflight", "--session-id", session_id, "--advance", "context", "--source-scope", "all", "--limit", "8"),
+        "agent_preflight_handoff": doctor_command(root, "agent-preflight", "--session-id", session_id, "--advance", "handoff", "--agent-command", quote_arg(agent_command)),
         "review_server": doctor_command(root, "runtime-review-server", "--session-id", session_id, "--port", str(int(review_port))),
         "generate_context": doctor_command(root, "context-review", "--session-id", session_id, "--action", "generate", "--source-scope", "all", "--limit", "8"),
         "export_handoff": doctor_command(root, "runtime-handoff", "--session-id", session_id),
@@ -111,11 +114,10 @@ def adapter_entrypoints(root: Path, session_id: str, *, agent_command: str, revi
 
 def mcp_tool_sequence(session_id: str, *, agent_command: str) -> list[dict[str, Any]]:
     return [
-        {"tool": "doctor_session", "arguments": {"session_id": session_id}},
-        {"tool": "doctor_context_review", "arguments": {"session_id": session_id, "action": "generate", "source_scope": "all", "limit": 8}},
+        {"tool": "doctor_agent_preflight", "arguments": {"session_id": session_id, "advance": "clarify", "goal": "<user task>"}},
+        {"tool": "doctor_agent_preflight", "arguments": {"session_id": session_id, "advance": "context", "source_scope": "all", "limit": 8}},
         {"tool": "doctor_context_review", "arguments": {"session_id": session_id, "action": "approve", "reason": "context matches intent"}},
-        {"tool": "doctor_runtime_handoff", "arguments": {"session_id": session_id}},
-        {"tool": "doctor_runtime_adapter", "arguments": {"session_id": session_id, "agent_command": agent_command}},
+        {"tool": "doctor_agent_preflight", "arguments": {"session_id": session_id, "advance": "handoff", "agent_command": agent_command}},
         {"tool": "doctor_answer_review", "arguments": {"session_id": session_id, "action": "prepare"}},
         {"tool": "doctor_answer_review", "arguments": {"session_id": session_id, "action": "run", "command": agent_command}},
         {"tool": "doctor_answer_review", "arguments": {"session_id": session_id, "action": "approve", "reason": "answer matches intent"}},
@@ -180,6 +182,7 @@ def render_target_doc(manifest: dict[str, Any], target: str) -> str:
         "## Required Behavior",
         "",
         "- Show the current review file to the user before advancing a gate.",
+        "- Prefer `doctor agent-preflight` / `doctor_agent_preflight` as the default entrypoint instead of calling low-level resolver tools directly.",
         "- Use `agent_handoff.md` / `model_input.md` as the only approved local context payload.",
         "- Use the answer command adapter or record an answer file before execution.",
         "- Record approve/reject decisions through Doctor instead of hiding them in chat history.",

@@ -31,6 +31,9 @@ doctor_run(goal, session_id=null, mode="standard")
   Start a Doctor runtime session with no-index clarification. This creates
   runtime/sessions/<session-id>/DOCTOR_SESSION.md and does not call the resolver.
 
+doctor_agent_preflight(advance="clarify", goal=null, session_id=null, source_scope="all", limit=8, mode="fast", agent_command="<agent command>", review_port=8765)
+  Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, and MCP clients. Use advance=clarify for the first no-index user prompt review, advance=context after the refined prompt is accepted, and advance=handoff after model_input.md is approved.
+
 doctor_session(session_id)
   Inspect a Doctor runtime session and refresh DOCTOR_SESSION.md.
 
@@ -182,15 +185,15 @@ and query-family scoped priors; `resolution_plan.json` records the active
 `query_family`, and each selected source exposes global and scoped feedback
 parts in `resolver_score_parts`.
 
-For Codex++ or another wrapper that wants automatic context before each task,
-use the CLI preflight entry point instead of embedding resolver logic in the UI:
+For Codex++ or another wrapper that wants a default preflight before each task,
+use the runtime preflight entry point instead of embedding resolver logic in the UI:
 
 ```bash
-agent-context codex-preflight \
+agent-context agent-preflight \
   --out /Users/gengrf/agent-context-system \
+  --advance clarify \
   --goal "告诉我本地所有项目里如何构建个人推荐系统" \
-  --source-scope gitProjects \
-  --mode fast
+  --session-id <session-id>
 ```
 
 For a wrapper UI, `context_panel` is the MCP equivalent of:

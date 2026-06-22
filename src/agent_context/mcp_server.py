@@ -18,6 +18,7 @@ from .access_policy import (
     update_access_policy,
 )
 from .acceptance import run_v1_acceptance, run_v1_followup, run_v1_refresh, run_v1_stage_status
+from .agent_preflight import run_agent_preflight
 from .alternatives import resolve_alternative_context
 from .answer_review import run_answer_review
 from .codebase_memory import build_codebase_memory_index, search_codebase_memory
@@ -151,6 +152,36 @@ def mcp_doctor_run(
         "mcp_version": MCP_VERSION,
         **start_runtime_session(resolve_out_root(out_root), goal, session_id=session_id, mode=mode),
     }
+
+
+def mcp_doctor_agent_preflight(
+    advance: str = "clarify",
+    goal: str | None = None,
+    session_id: str | None = None,
+    source_scope: str = "all",
+    limit: int = 8,
+    mode: str = "fast",
+    agent_command: str = "<agent command>",
+    review_port: int = 8765,
+    out_root: str | None = None,
+) -> dict[str, Any]:
+    try:
+        return {
+            "mcp_version": MCP_VERSION,
+            **run_agent_preflight(
+                resolve_out_root(out_root),
+                advance=advance,
+                goal=goal,
+                session_id=session_id,
+                source_scope=source_scope,
+                limit=max(1, limit),
+                mode=mode,
+                agent_command=agent_command,
+                review_port=max(1, review_port),
+            ),
+        }
+    except (FileNotFoundError, ValueError) as exc:
+        return runtime_mcp_error("agent_preflight", advance, session_id, exc)
 
 
 def mcp_doctor_session(session_id: str, out_root: str | None = None) -> dict[str, Any]:
@@ -1378,6 +1409,30 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
     def doctor_run(goal: str, session_id: str | None = None, mode: str = "standard") -> dict[str, Any]:
         """Start a Doctor runtime session with no-index clarification."""
         return mcp_doctor_run(goal=goal, session_id=session_id, mode=mode, out_root=str(root))
+
+    @server.tool()
+    def doctor_agent_preflight(
+        advance: str = "clarify",
+        goal: str | None = None,
+        session_id: str | None = None,
+        source_scope: str = "all",
+        limit: int = 8,
+        mode: str = "fast",
+        agent_command: str = "<agent command>",
+        review_port: int = 8765,
+    ) -> dict[str, Any]:
+        """Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, and MCP clients."""
+        return mcp_doctor_agent_preflight(
+            advance=advance,
+            goal=goal,
+            session_id=session_id,
+            source_scope=source_scope,
+            limit=limit,
+            mode=mode,
+            agent_command=agent_command,
+            review_port=review_port,
+            out_root=str(root),
+        )
 
     @server.tool()
     def doctor_session(session_id: str) -> dict[str, Any]:

@@ -148,6 +148,41 @@ runtime. `runtime-acceptance` writes a GitHub handoff report under
 `runtime-review-server` starts a localhost review page with approve/reject
 buttons for the current gate.
 
+For Codex++, Warp, Codex CLI, or an MCP client, prefer the unified preflight
+entrypoint. It returns `agent_preflight.md/json`, which tells the client which
+file must be shown to the user before context is sent to a model:
+
+```bash
+doctor agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --advance clarify \
+  --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历" \
+  --session-id <session-id>
+```
+
+After the user accepts `refined_prompt.md`, the same client advances to the
+reviewable context payload:
+
+```bash
+doctor agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --advance context \
+  --session-id <session-id> \
+  --source-scope all \
+  --limit 8
+```
+
+After the user approves `model_input.md`, export the approved model handoff and
+client adapter package:
+
+```bash
+doctor agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --advance handoff \
+  --session-id <session-id> \
+  --agent-command "<agent command>"
+```
+
 Stage 1 is a no-index clarification pass. It normalizes the user's natural
 language task into a reviewable prompt before Doctor is allowed to read local
 indexes or provider manifests:
@@ -167,7 +202,7 @@ runtime/sessions/<session-id>/refined_prompt.md
 
 `clarify` records `doctor_access=false`, `resolver_called=false`, and
 `index_access=false`. After the user accepts `refined_prompt.md`, pass that
-prompt to `codex-preflight`; that second stage generates the reviewable
+session to `agent-preflight --advance context`; that second stage generates the reviewable
 `model_input.md` context payload.
 
 Stage 2 turns the accepted prompt into a reviewable Doctor context payload:
@@ -207,7 +242,7 @@ agent-context context-review \
 ```
 
 Approve/reject events append to `feedback/context_review_feedback.jsonl`.
-`regenerate` reruns `codex-preflight` from the same `refined_prompt.md` after
+`regenerate` reruns the low-level preflight generator from the same `refined_prompt.md` after
 changing scope, mode, or limit.
 
 Export the approved context for Codex++, Warp, or Doctor:
@@ -518,12 +553,11 @@ packs/<task-id>-resolve-<timestamp>/codex_preflight.md
 packs/<task-id>-resolve-<timestamp>/model_input.md
 ```
 
-`codex-preflight` is the decoupled entry point for Codex++ or another wrapper:
-it calls the resolver when `auto_context` is enabled, writes
-`codex_preflight.md` and a reviewable `model_input.md`, then returns the
-context/sources/manifest/model-input paths. `model_input.md` is the visible
-Doctor context payload proposed for the model; it does not include hidden
-platform or client system prompts.
+`agent-preflight` is the default decoupled entry point for Codex++ or another
+wrapper. It preserves the review gates and writes `agent_preflight.md/json`.
+The older `codex-preflight` remains the lower-level context generator used
+inside Stage 2; wrappers should not call it as the first default task hook
+because it skips the no-index clarify review.
 
 `panel` writes a UI-friendly status contract and a local HTML panel:
 
@@ -565,7 +599,7 @@ uv run agent-context mcp --out /Users/gengrf/agent-context-system
 
 The MCP server exposes local tools for `resolve_context`, `search_context`,
 `index_context`, `refresh_providers`, `index_projects`,
-`doctor_run`, `doctor_session`, `doctor_runtime_acceptance`,
+`doctor_run`, `doctor_agent_preflight`, `doctor_session`, `doctor_runtime_acceptance`,
 `doctor_runtime_handoff`, `doctor_runtime_adapter`,
 `doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,
 `codebase_memory_index`, `codebase_memory_search`, `index_sessions`, `build_hot_pack`, `read_source`,

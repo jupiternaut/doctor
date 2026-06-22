@@ -16,6 +16,18 @@ doctor run \
   --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历"
 ```
 
+For Codex++, Warp, Codex CLI, or MCP clients, use the unified preflight
+entrypoint. It returns `agent_preflight.md/json` and tells the client which file
+must be shown to the user before model input is allowed:
+
+```bash
+doctor agent-preflight \
+  --out /Users/gengrf/agent-context-system \
+  --advance clarify \
+  --goal "我想比较我的 Codex 项目和一份 AI 应用实习生简历" \
+  --session-id doctor-demo
+```
+
 Inspect the session at any time:
 
 ```bash
@@ -76,12 +88,12 @@ That file tells the user or an agent:
 
 ```text
 user task
-  -> doctor run
+  -> doctor run / agent-preflight clarify
   -> clarify/refine
   -> user reviews refined_prompt.md
-  -> context-review generate
+  -> agent-preflight context / context-review generate
   -> user reviews model_input.md
-  -> runtime-handoff exports approved model input for Codex++/Warp/Doctor
+  -> agent-preflight handoff / runtime-handoff exports approved model input
   -> runtime-adapter exports client adapter files
   -> answer-review prepare/run/record
   -> user reviews answer.md
@@ -138,6 +150,7 @@ The runtime session stores pointers to those pack files instead of copying them.
 The MCP server exposes:
 
 - `doctor_run`: create a no-index runtime session
+- `doctor_agent_preflight`: default client entrypoint for clarify/context/handoff gates
 - `doctor_session`: inspect and refresh `DOCTOR_SESSION.md`
 - `doctor_runtime_acceptance`: write the session acceptance handoff
 - `doctor_runtime_handoff`: export approved `model_input.md` for Codex++, Warp, or Doctor
@@ -236,6 +249,7 @@ Implemented:
 - review-gated four-stage file contract
 - CLI alias through `doctor`
 - MCP tools for all four review gates
+- default `agent-preflight` CLI/MCP entrypoint for Codex++/Warp/Codex CLI/MCP clients
 - approved-context handoff export for Codex++/Warp/Doctor
 - runtime adapter package for Codex++/Warp/Codex CLI/MCP clients
 - answer-stage command adapter that feeds `answer_packet.md` to local agents on stdin

@@ -177,7 +177,7 @@ def render_refined_prompt(clarification: dict[str, Any]) -> str:
             "",
             "## Next Stage",
             "",
-            "If this prompt is accepted, pass the refined prompt to `agent-context codex-preflight` to generate `model_input.md` for review.",
+            "If this prompt is accepted, advance the session with `agent-context agent-preflight --advance context` to generate `model_input.md` for review.",
             "",
         ]
     )

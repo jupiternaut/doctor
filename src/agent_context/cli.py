@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .access_policy import load_access_policy, read_access_audit, update_access_policy, write_default_access_policy
 from .acceptance import run_v1_acceptance, run_v1_followup, run_v1_refresh, run_v1_stage_status
+from .agent_preflight import run_agent_preflight
 from .alternatives import resolve_alternative_context
 from .answer_review import run_answer_review
 from .arena import build_arena, record_feedback
@@ -115,6 +116,22 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_run.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     doctor_run.add_argument("--session-id", default=None, help="Optional runtime session id to reuse.")
     doctor_run.add_argument("--mode", choices=["fast", "standard"], default="standard", help="Clarification mode metadata.")
+
+    agent_preflight = subparsers.add_parser("agent-preflight", help="Default Doctor runtime preflight entrypoint for Codex++, Warp, Codex CLI, or MCP clients.")
+    agent_preflight.add_argument("--advance", choices=["clarify", "context", "handoff"], default="clarify", help="Runtime gate to advance: clarify, context, or handoff.")
+    agent_preflight.add_argument("--goal", default=None, help="Original user task. Required for --advance clarify.")
+    agent_preflight.add_argument("--session-id", default=None, help="Runtime session id. Required after clarify.")
+    agent_preflight.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    agent_preflight.add_argument("--limit", type=int, default=8, help="Maximum sources to include when generating context.")
+    agent_preflight.add_argument(
+        "--source-scope",
+        choices=SOURCE_SCOPE_CHOICES,
+        default="all",
+        help="Restrict resolver source families when generating context.",
+    )
+    agent_preflight.add_argument("--mode", choices=["fast", "deep", "arena"], default="fast", help="Context generation mode metadata.")
+    agent_preflight.add_argument("--agent-command", default="<agent command>", help="Default command included in the runtime adapter package.")
+    agent_preflight.add_argument("--review-port", type=int, default=8765, help="Local review server port included in generated adapter docs.")
 
     doctor_session = subparsers.add_parser("session", help="Inspect a Doctor runtime session and write DOCTOR_SESSION.md.")
     doctor_session.add_argument("--session-id", required=True, help="Runtime session id to inspect.")
@@ -679,6 +696,35 @@ def main(argv: list[str] | None = None) -> int:
         result = build_clarification(out_root, args.goal, session_id=args.session_id, mode=args.mode)
     elif args.command == "run":
         result = start_runtime_session(out_root, args.goal, session_id=args.session_id, mode=args.mode)
+    elif args.command == "agent-preflight":
+        try:
+            result = run_agent_preflight(
+                out_root,
+                advance=args.advance,
+                goal=args.goal,
+                session_id=args.session_id,
+                source_scope=args.source_scope,
+                limit=args.limit,
+                mode=args.mode,
+                agent_command=args.agent_command,
+                review_port=args.review_port,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            print(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "command": "agent-preflight",
+                        "advance": args.advance,
+                        "session_id": args.session_id,
+                        "error": str(exc),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 1
     elif args.command == "session":
         result = inspect_runtime_session(out_root, args.session_id)
     elif args.command == "runtime-acceptance":

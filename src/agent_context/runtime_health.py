@@ -453,7 +453,7 @@ def hot_pack_check(out_root: Path) -> dict[str, Any]:
     if missing:
         status = "failed"
         summary = "Latest hot pack is missing required files"
-        next_action = "Run agent-context resolve or codex-preflight for a real task goal."
+        next_action = "Run agent-context agent-preflight --advance context or resolve for a real task goal."
     elif source_count == 0:
         status = "warning"
         summary = "Latest hot pack has no sources"
@@ -461,7 +461,7 @@ def hot_pack_check(out_root: Path) -> dict[str, Any]:
     elif source_scope and source_scope != "all":
         status = "warning"
         summary = f"latest context pack has {source_count} sources but source_scope={source_scope}"
-        next_action = "Run agent-context codex-preflight or resolve with --source-scope all for full v1 provider coverage evidence."
+        next_action = "Run agent-context agent-preflight --advance context or resolve with --source-scope all for full v1 provider coverage evidence."
     else:
         status = "ok"
         summary = f"latest context pack has {source_count} sources"
