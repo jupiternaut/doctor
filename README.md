@@ -236,12 +236,26 @@ It writes:
 ```text
 runtime/sessions/<session-id>/answer_review.json
 runtime/sessions/<session-id>/answer_packet.md
+runtime/sessions/<session-id>/answer_runs/
 runtime/sessions/<session-id>/answer_review_events.jsonl
 ```
 
 `answer_packet.md` is the answer-stage packet. The approved context bridge is
 `agent_handoff.md`.
-After an agent produces an answer, record and review it:
+Run a local agent/model command with `answer_packet.md` on stdin:
+
+```bash
+agent-context answer-review \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id> \
+  --action run \
+  --command "cat"
+```
+
+The command stdout becomes the recorded answer for review. Doctor stores stdin,
+stdout, stderr, and a result JSON under `answer_runs/`.
+
+If an external agent has already produced an answer file, record and review it:
 
 ```bash
 agent-context answer-review \

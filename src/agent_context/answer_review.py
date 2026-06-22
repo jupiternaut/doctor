@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shlex
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -9,7 +11,7 @@ from .io import append_jsonl, ensure_dir, write_text
 
 
 ANSWER_REVIEW_VERSION = "0.1"
-ANSWER_REVIEW_ACTIONS = {"prepare", "record", "approve", "reject"}
+ANSWER_REVIEW_ACTIONS = {"prepare", "run", "record", "approve", "reject"}
 
 
 def run_answer_review(
@@ -19,6 +21,9 @@ def run_answer_review(
     session_id: str,
     answer_text: str = "",
     answer_file: str | Path | None = None,
+    command: str = "",
+    cwd: str | Path | None = None,
+    timeout_seconds: int = 120,
     reason: str = "",
 ) -> dict[str, Any]:
     if action not in ANSWER_REVIEW_ACTIONS:
@@ -28,6 +33,15 @@ def run_answer_review(
     root = Path(out_root).expanduser().resolve()
     if action == "prepare":
         return prepare_answer_review(root, session_id=session_id, reason=reason)
+    if action == "run":
+        return run_answer_command(
+            root,
+            session_id=session_id,
+            command=command,
+            cwd=cwd,
+            timeout_seconds=max(1, int(timeout_seconds)),
+            reason=reason,
+        )
     if action == "record":
         return record_answer_output(root, session_id=session_id, answer_text=answer_text, answer_file=answer_file, reason=reason)
     return record_answer_decision(root, action=action, session_id=session_id, reason=reason)
@@ -58,14 +72,105 @@ def prepare_answer_review(root: Path, *, session_id: str, reason: str) -> dict[s
         "context_md_path": preflight.get("context_md_path"),
         "sources_jsonl_path": preflight.get("sources_jsonl_path"),
         "answer_md_path": str(session_dir / "answer.md"),
+        "answer_runs_dir": str(session_dir / "answer_runs"),
         "answer_packet_md_path": str(session_dir / "answer_packet.md"),
         "answer_review_json_path": str(session_dir / "answer_review.json"),
         "events_jsonl_path": str(session_dir / "answer_review_events.jsonl"),
         "global_feedback_jsonl_path": str(root / "feedback" / "answer_review_feedback.jsonl"),
         "refined_prompt": context_review.get("refined_prompt", ""),
         "answer_text": "",
+        "answer_runs": [],
     }
     persist_answer_review(root, review, event_action="prepare", event_reason=reason)
+    return review
+
+
+def run_answer_command(
+    root: Path,
+    *,
+    session_id: str,
+    command: str,
+    cwd: str | Path | None,
+    timeout_seconds: int,
+    reason: str,
+) -> dict[str, Any]:
+    if not command.strip():
+        raise ValueError("command is required for answer run")
+    review = ensure_answer_prepared(root, session_id)
+    if review.get("status") == "approved":
+        raise ValueError("answer_review is already approved; start a new session before rerunning")
+    run_id = datetime.now().strftime("answer-run-%Y%m%d%H%M%S%f")
+    runs_dir = ensure_dir(Path(str(review.get("answer_runs_dir") or Path(str(review["answer_review_json_path"])).parent / "answer_runs")))
+    cwd_path = Path(cwd).expanduser().resolve() if cwd else root
+    if not cwd_path.exists() or not cwd_path.is_dir():
+        raise FileNotFoundError(f"answer cwd not found: {cwd_path}")
+    argv = shlex.split(command)
+    if not argv:
+        raise ValueError("command parsed to no argv")
+
+    packet_path = Path(str(review["answer_packet_md_path"]))
+    packet_text = packet_path.read_text(encoding="utf-8")
+    stdin_path = runs_dir / f"{run_id}.stdin.md"
+    stdout_path = runs_dir / f"{run_id}.stdout.txt"
+    stderr_path = runs_dir / f"{run_id}.stderr.txt"
+    result_path = runs_dir / f"{run_id}.json"
+    write_text(stdin_path, packet_text)
+    started_at = datetime.now().astimezone()
+    timed_out = False
+    try:
+        completed = subprocess.run(
+            argv,
+            cwd=str(cwd_path),
+            input=packet_text,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+        returncode = completed.returncode
+        stdout = completed.stdout or ""
+        stderr = completed.stderr or ""
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        returncode = None
+        stdout = decode_timeout_output(exc.stdout)
+        stderr = decode_timeout_output(exc.stderr) or f"answer command timed out after {timeout_seconds} seconds"
+    finished_at = datetime.now().astimezone()
+
+    write_text(stdout_path, stdout)
+    write_text(stderr_path, stderr)
+    answer_run = {
+        "run_id": run_id,
+        "command": command,
+        "argv": argv,
+        "cwd": str(cwd_path),
+        "timeout_seconds": timeout_seconds,
+        "timed_out": timed_out,
+        "returncode": returncode,
+        "started_at": started_at.isoformat(),
+        "finished_at": finished_at.isoformat(),
+        "stdin_path": str(stdin_path),
+        "stdout_path": str(stdout_path),
+        "stderr_path": str(stderr_path),
+        "result_json_path": str(result_path),
+        "reason": reason,
+    }
+    write_text(result_path, json.dumps(answer_run, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    review.setdefault("answer_runs", []).append(answer_run)
+    review["action"] = "run"
+    review["last_answer_run_id"] = run_id
+    review["last_answer_returncode"] = returncode
+    review["last_answer_timed_out"] = timed_out
+    if returncode == 0 and not timed_out and stdout.strip():
+        review["status"] = "pending_review"
+        review["answer_text"] = stdout.strip()
+        review["answer_source_path"] = str(stdout_path)
+        review["last_recorded_at"] = finished_at.isoformat()
+        review["last_record_reason"] = reason
+        write_text(Path(str(review["answer_md_path"])), render_answer_markdown(review))
+    else:
+        review["status"] = "answer_failed"
+    persist_answer_review(root, review, event_action="run", event_reason=reason)
     return review
 
 
@@ -123,7 +228,19 @@ def load_answer_review(root: Path, session_id: str) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def ensure_answer_prepared(root: Path, session_id: str) -> dict[str, Any]:
+    path = root / "runtime" / "sessions" / session_id / "answer_review.json"
+    if path.exists():
+        review = json.loads(path.read_text(encoding="utf-8"))
+        review.setdefault("answer_runs_dir", str(path.parent / "answer_runs"))
+        review.setdefault("answer_runs", [])
+        return review
+    return prepare_answer_review(root, session_id=session_id, reason="auto-prepare before answer run")
+
+
 def persist_answer_review(root: Path, review: dict[str, Any], *, event_action: str, event_reason: str) -> None:
+    review.setdefault("answer_runs", [])
+    review.setdefault("answer_runs_dir", str(Path(str(review["answer_review_json_path"])).parent / "answer_runs"))
     write_text(Path(str(review["answer_review_json_path"])), json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     write_text(Path(str(review["answer_packet_md_path"])), render_answer_packet_markdown(review))
     event = answer_review_event(review, action=event_action, reason=event_reason)
@@ -144,6 +261,8 @@ def answer_review_event(review: dict[str, Any], *, action: str, reason: str) -> 
         "model_input_md_path": review.get("model_input_md_path"),
         "answer_packet_md_path": review.get("answer_packet_md_path"),
         "answer_md_path": review.get("answer_md_path"),
+        "last_answer_run_id": review.get("last_answer_run_id"),
+        "last_answer_returncode": review.get("last_answer_returncode"),
     }
 
 
@@ -177,6 +296,7 @@ def render_answer_packet_markdown(review: dict[str, Any]) -> str:
         "- Keep local evidence, inference, limitations, and next steps separate.",
         "- Do not claim sources that are not present in the approved context payload.",
         "- After a model or agent produces an answer, record it with `agent-context answer-review --action record`.",
+        "- To let a local agent command produce an answer, use `agent-context answer-review --action run --command ...`; the packet is passed on stdin.",
         "",
         "## Recorded Answer",
         "",
@@ -194,6 +314,12 @@ def render_answer_packet_markdown(review: dict[str, Any]) -> str:
             "",
             "```bash",
             f"agent-context answer-review --out {answer_out_hint(review)} --session-id {review['session_id']} --action record --answer-file /path/to/answer.md",
+            "```",
+            "",
+            "Run a local answer command:",
+            "",
+            "```bash",
+            f"agent-context answer-review --out {answer_out_hint(review)} --session-id {review['session_id']} --action run --command \"<agent command>\"",
             "```",
             "",
             "Approve or reject the recorded answer:",
@@ -216,6 +342,24 @@ def render_answer_packet_markdown(review: dict[str, Any]) -> str:
                 "",
             ]
         )
+    if review.get("answer_runs"):
+        lines.extend(["## Answer Command Runs", ""])
+        for run in review["answer_runs"]:
+            lines.extend(
+                [
+                    f"### {run['run_id']}",
+                    "",
+                    f"- Command: `{run['command']}`",
+                    f"- CWD: `{run['cwd']}`",
+                    f"- Return code: `{run.get('returncode')}`",
+                    f"- Timed out: `{str(run.get('timed_out')).lower()}`",
+                    f"- stdin: `{run['stdin_path']}`",
+                    f"- stdout: `{run['stdout_path']}`",
+                    f"- stderr: `{run['stderr_path']}`",
+                    f"- result: `{run['result_json_path']}`",
+                    "",
+                ]
+            )
     return "\n".join(lines)
 
 
@@ -239,3 +383,11 @@ def render_answer_markdown(review: dict[str, Any]) -> str:
 def answer_out_hint(review: dict[str, Any]) -> str:
     path = Path(str(review["answer_review_json_path"]))
     return str(path.parents[3]) if len(path.parents) >= 4 else "."
+
+
+def decode_timeout_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value

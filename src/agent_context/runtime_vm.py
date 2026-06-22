@@ -324,6 +324,8 @@ def build_stage_states(root: Path, session_id: str) -> list[dict[str, Any]]:
             "state_path": str(session_dir / "answer_review.json"),
             "review_path": str(session_dir / "answer_packet.md"),
             "answer_md_path": answer.get("answer_md_path") if answer else str(session_dir / "answer.md"),
+            "answer_runs_dir": answer.get("answer_runs_dir") if answer else str(session_dir / "answer_runs"),
+            "answer_run_count": len(answer.get("answer_runs") or []) if answer else 0,
             "model_input_md_path": answer.get("model_input_md_path") if answer else None,
         },
         {
@@ -420,9 +422,23 @@ def determine_next_state(root: Path, session_id: str, stages: list[dict[str, Any
     if answer["status"] == "awaiting_answer":
         return next_state(
             "awaiting_answer_output",
-            "Use answer_packet.md with the model, then record the answer.",
-            [doctor_command(root, "answer-review", "--session-id", session_id, "--action", "record", "--answer-file", "/path/to/answer.md")],
+            "Use answer_packet.md with a model or local answer command, then review the answer.",
+            [
+                doctor_command(root, "answer-review", "--session-id", session_id, "--action", "run", "--command", quote_goal("<agent command>")),
+                doctor_command(root, "answer-review", "--session-id", session_id, "--action", "record", "--answer-file", "/path/to/answer.md"),
+            ],
             ready=False,
+            review_file=answer["review_path"],
+        )
+    if answer["status"] == "answer_failed":
+        return next_state(
+            "answer_failed",
+            "The local answer command failed or produced no answer. Rerun it or record an answer manually.",
+            [
+                doctor_command(root, "answer-review", "--session-id", session_id, "--action", "run", "--command", quote_goal("<agent command>")),
+                doctor_command(root, "answer-review", "--session-id", session_id, "--action", "record", "--answer-file", "/path/to/revised-answer.md"),
+            ],
+            ready=True,
             review_file=answer["review_path"],
         )
     if answer["status"] == "pending_review":
@@ -534,6 +550,7 @@ def runtime_file_contract(root: Path, session_id: str, stages: list[dict[str, An
         "answer_review_json_path": str(session_dir / "answer_review.json"),
         "answer_packet_md_path": str(session_dir / "answer_packet.md"),
         "answer_md_path": str(session_dir / "answer.md"),
+        "answer_runs_dir": str(session_dir / "answer_runs"),
         "answer_review_events_jsonl_path": str(session_dir / "answer_review_events.jsonl"),
         "execution_review_json_path": str(session_dir / "execution_review.json"),
         "execution_report_md_path": str(session_dir / "execution_report.md"),
@@ -578,6 +595,8 @@ def render_session_markdown(session: dict[str, Any]) -> str:
         )
         if stage.get("model_input_md_path"):
             lines.append(f"  - Model input: `{stage['model_input_md_path']}`")
+        if stage.get("answer_runs_dir"):
+            lines.append(f"  - Answer runs: `{stage['answer_runs_dir']}`")
         if stage.get("artifacts_dir"):
             lines.append(f"  - Artifacts: `{stage['artifacts_dir']}`")
         if stage.get("artifact_index_md_path"):
@@ -610,6 +629,7 @@ def render_session_markdown(session: dict[str, Any]) -> str:
             "  answer_review.json",
             "  answer_packet.md",
             "  answer.md",
+            "  answer_runs/",
             "  answer_review_events.jsonl",
             "  execution_review.json",
             "  execution_report.md",

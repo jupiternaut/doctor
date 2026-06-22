@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -99,6 +100,56 @@ def test_answer_review_prepare_record_and_feedback(tmp_path: Path) -> None:
     assert feedback[-1]["answer_packet_md_path"] == prepared["answer_packet_md_path"]
 
 
+def test_answer_review_runs_local_answer_command(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    write_context_review(out, status="approved")
+    write_agent_handoff(out)
+    run_answer_review(out, action="prepare", session_id="session-answer")
+    command = f"{sys.executable} -c \"import sys; sys.stdin.read(); print('agent generated answer')\""
+
+    ran = run_answer_review(
+        out,
+        action="run",
+        session_id="session-answer",
+        command=command,
+        cwd=tmp_path,
+        timeout_seconds=10,
+        reason="local agent adapter",
+    )
+
+    assert ran["status"] == "pending_review"
+    assert ran["answer_text"] == "agent generated answer"
+    assert Path(ran["answer_md_path"]).read_text(encoding="utf-8").count("agent generated answer") == 1
+    latest = ran["answer_runs"][-1]
+    assert Path(latest["stdin_path"]).read_text(encoding="utf-8").startswith("---")
+    assert Path(latest["stdout_path"]).read_text(encoding="utf-8").strip() == "agent generated answer"
+    assert Path(latest["stderr_path"]).read_text(encoding="utf-8") == ""
+    assert Path(latest["result_json_path"]).exists()
+
+
+def test_answer_review_run_failure_keeps_review_gate_open(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    write_context_review(out, status="approved")
+    write_agent_handoff(out)
+    command = f"{sys.executable} -c \"import sys; sys.stderr.write('failed answer'); sys.exit(2)\""
+
+    ran = run_answer_review(
+        out,
+        action="run",
+        session_id="session-answer",
+        command=command,
+        cwd=tmp_path,
+        timeout_seconds=10,
+        reason="broken local agent adapter",
+    )
+
+    assert ran["status"] == "answer_failed"
+    assert ran["last_answer_returncode"] == 2
+    latest = ran["answer_runs"][-1]
+    assert Path(latest["stderr_path"]).read_text(encoding="utf-8") == "failed answer"
+    assert not Path(ran["answer_md_path"]).exists()
+
+
 def test_answer_review_cli_records_answer_from_file(tmp_path: Path, capsys) -> None:
     out = tmp_path / "out"
     write_context_review(out, status="approved", session_id="session-cli-answer")
@@ -129,6 +180,37 @@ def test_answer_review_cli_records_answer_from_file(tmp_path: Path, capsys) -> N
     assert result["answer_source_path"] == str(answer_file.resolve())
     assert "外部" not in Path(result["answer_md_path"]).read_text(encoding="utf-8")
     assert "Codex++ 或 Warp" in Path(result["answer_md_path"]).read_text(encoding="utf-8")
+
+
+def test_answer_review_cli_runs_answer_command(tmp_path: Path, capsys) -> None:
+    out = tmp_path / "out"
+    write_context_review(out, status="approved", session_id="session-cli-run")
+    write_agent_handoff(out, session_id="session-cli-run")
+    command = f"{sys.executable} -c \"import sys; sys.stdin.read(); print('cli agent answer')\""
+
+    assert main(
+        [
+            "answer-review",
+            "--out",
+            str(out),
+            "--session-id",
+            "session-cli-run",
+            "--action",
+            "run",
+            "--command",
+            command,
+            "--cwd",
+            str(tmp_path),
+            "--timeout-seconds",
+            "10",
+        ]
+    ) == 0
+
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["status"] == "pending_review"
+    assert result["answer_text"] == "cli agent answer"
+    assert result["answer_runs"][-1]["returncode"] == 0
 
 
 def test_answer_review_cli_reports_unapproved_context_as_json_error(tmp_path: Path, capsys) -> None:

@@ -43,8 +43,8 @@ doctor_runtime_handoff(session_id)
 doctor_context_review(action="generate", session_id=null, refined_prompt_path=null, reason="", source_scope="all", limit=12, mode="fast")
   Generate, regenerate, approve, or reject the reviewable model_input.md payload.
 
-doctor_answer_review(action="prepare", session_id="", answer_text="", answer_file=null, reason="")
-  Prepare, record, approve, or reject the answer packet after context approval and runtime handoff export.
+doctor_answer_review(action="prepare", session_id="", answer_text="", answer_file=null, command="", cwd=null, timeout_seconds=120, reason="")
+  Prepare, run, record, approve, or reject the answer packet after context approval and runtime handoff export. The run action passes answer_packet.md on stdin and captures stdout as the candidate answer.
 
 doctor_execution_review(action="prepare", session_id="", command="", cwd=null, timeout_seconds=120, artifact_file=null, reason="")
   Prepare, run, record, approve, or reject local execution artifacts after answer approval.

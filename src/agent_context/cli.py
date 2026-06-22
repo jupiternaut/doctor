@@ -198,11 +198,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     context_review.add_argument("--mode", choices=["fast", "deep", "arena"], default="fast", help="Preflight mode for generate/regenerate.")
 
-    answer_review = subparsers.add_parser("answer-review", help="Prepare, record, or review an answer from an approved Doctor model input.")
-    answer_review.add_argument("--action", choices=["prepare", "record", "approve", "reject"], default="prepare", help="Answer review action.")
+    answer_review = subparsers.add_parser("answer-review", help="Prepare, run, record, or review an answer from an approved Doctor model input.")
+    answer_review.add_argument("--action", choices=["prepare", "run", "record", "approve", "reject"], default="prepare", help="Answer review action.")
     answer_review.add_argument("--session-id", required=True, help="Runtime session id.")
     answer_review.add_argument("--answer-text", default="", help="Inline answer text for --action record.")
     answer_review.add_argument("--answer-file", default=None, help="Path to answer Markdown/text for --action record.")
+    answer_review.add_argument("--command", dest="answer_command", default="", help="Command to run for --action run. The answer packet is passed on stdin.")
+    answer_review.add_argument("--cwd", default=None, help="Working directory for --action run. Defaults to --out.")
+    answer_review.add_argument("--timeout-seconds", type=int, default=120, help="Maximum seconds for --action run.")
     answer_review.add_argument("--reason", default="", help="Optional preparation or review reason.")
     answer_review.add_argument("--out", default=None, help="Output root. Overrides global --out.")
 
@@ -740,6 +743,9 @@ def main(argv: list[str] | None = None) -> int:
                 session_id=args.session_id,
                 answer_text=args.answer_text,
                 answer_file=args.answer_file,
+                command=args.answer_command,
+                cwd=args.cwd,
+                timeout_seconds=args.timeout_seconds,
                 reason=args.reason,
             )
         except (FileNotFoundError, ValueError) as exc:

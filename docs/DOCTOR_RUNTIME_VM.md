@@ -73,7 +73,7 @@ user task
   -> context-review generate
   -> user reviews model_input.md
   -> runtime-handoff exports approved model input for Codex++/Warp/Doctor
-  -> answer-review prepare/record
+  -> answer-review prepare/run/record
   -> user reviews answer.md
   -> execution-review prepare/run
   -> user reviews artifacts
@@ -100,6 +100,7 @@ runtime/sessions/<session-id>/
   answer_review.json
   answer_packet.md
   answer.md
+  answer_runs/
   answer_review_events.jsonl
   execution_review.json
   execution_report.md
@@ -130,7 +131,7 @@ The MCP server exposes:
 - `doctor_runtime_acceptance`: write the session acceptance handoff
 - `doctor_runtime_handoff`: export approved `model_input.md` for Codex++, Warp, or Doctor
 - `doctor_context_review`: generate, regenerate, approve, or reject `model_input.md`
-- `doctor_answer_review`: prepare, record, approve, or reject the answer packet
+- `doctor_answer_review`: prepare, run, record, approve, or reject the answer packet
 - `doctor_execution_review`: prepare, run, record, approve, or reject local artifacts
 - existing resolver/search/read/build tools for the second stage
 
@@ -197,13 +198,13 @@ session gate in a browser. It shows:
 - active review file preview
 - stage table
 - missing acceptance checks
-- approve/reject or prepare/record/run buttons for the current gate
+- approve/reject or prepare/run/record buttons for the current gate
 - export the approved context handoff after context review passes
 
 The server calls the same stage functions as the CLI:
 
 - `context-review` for context approve/reject
-- `answer-review` for answer prepare/record/approve/reject
+- `answer-review` for answer prepare/run/record/approve/reject
 - `execution-review` for execution prepare/run/approve/reject
 
 It refreshes `DOCTOR_SESSION.md` and `runtime-vm-acceptance-latest.*` after each
@@ -220,6 +221,7 @@ Implemented:
 - CLI alias through `doctor`
 - MCP tools for all four review gates
 - approved-context handoff export for Codex++/Warp/Doctor
+- answer-stage command adapter that feeds `answer_packet.md` to local agents on stdin
 - acceptance handoff reports
 - `panel/status.json` runtime VM status for UI clients
 - localhost clickable review server for the current gate

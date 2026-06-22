@@ -215,6 +215,9 @@ def mcp_doctor_answer_review(
     session_id: str = "",
     answer_text: str = "",
     answer_file: str | None = None,
+    command: str = "",
+    cwd: str | None = None,
+    timeout_seconds: int = 120,
     reason: str = "",
     out_root: str | None = None,
 ) -> dict[str, Any]:
@@ -226,6 +229,9 @@ def mcp_doctor_answer_review(
             session_id=session_id,
             answer_text=answer_text,
             answer_file=answer_file,
+            command=command,
+            cwd=cwd,
+            timeout_seconds=max(1, timeout_seconds),
             reason=reason,
         )
     except (FileNotFoundError, ValueError) as exc:
@@ -1393,14 +1399,20 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
         session_id: str = "",
         answer_text: str = "",
         answer_file: str | None = None,
+        command: str = "",
+        cwd: str | None = None,
+        timeout_seconds: int = 120,
         reason: str = "",
     ) -> dict[str, Any]:
-        """Prepare, record, approve, or reject a Doctor answer packet."""
+        """Prepare, run, record, approve, or reject a Doctor answer packet."""
         return mcp_doctor_answer_review(
             action=action,
             session_id=session_id,
             answer_text=answer_text,
             answer_file=answer_file,
+            command=command,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
             reason=reason,
             out_root=str(root),
         )

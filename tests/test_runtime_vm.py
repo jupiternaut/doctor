@@ -234,13 +234,17 @@ def test_runtime_vm_mcp_review_tools_advance_four_stage_session(tmp_path: Path) 
     assert answer_prepared["status"] == "awaiting_answer"
     assert answer_prepared["runtime_session"]["status"] == "awaiting_answer_output"
 
+    answer_command = f"{sys.executable} -c \"import sys; sys.stdin.read(); print('The approved model input is ready for execution planning.')\""
     answer_recorded = mcp_doctor_answer_review(
-        action="record",
+        action="run",
         session_id="doctor-mcp-flow",
-        answer_text="The approved model input is ready for execution planning.",
+        command=answer_command,
+        cwd=str(tmp_path),
+        timeout_seconds=10,
         out_root=str(out),
     )
     assert answer_recorded["status"] == "pending_review"
+    assert answer_recorded["answer_runs"][-1]["returncode"] == 0
     answer_approved = mcp_doctor_answer_review(action="approve", session_id="doctor-mcp-flow", out_root=str(out))
     assert answer_approved["status"] == "approved"
     assert answer_approved["runtime_session"]["status"] == "ready_for_execution_prepare"

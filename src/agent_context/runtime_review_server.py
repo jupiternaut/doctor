@@ -41,7 +41,9 @@ def handle_runtime_review_action(
         result = export_runtime_handoff(root, session_id)
     elif action == "prepare_answer" and status == "ready_for_answer_prepare":
         result = run_answer_review(root, action="prepare", session_id=session_id, reason=reason)
-    elif action in {"record_answer", "record_revised_answer"} and status in {"awaiting_answer_output", "answer_rejected"}:
+    elif action in {"run_answer", "rerun_answer"} and status in {"awaiting_answer_output", "answer_rejected", "answer_failed"}:
+        result = run_answer_review(root, action="run", session_id=session_id, command=command, cwd=cwd or str(root), timeout_seconds=max(1, timeout_seconds), reason=reason)
+    elif action in {"record_answer", "record_revised_answer"} and status in {"awaiting_answer_output", "answer_rejected", "answer_failed"}:
         result = run_answer_review(root, action="record", session_id=session_id, answer_text=answer_text, reason=reason)
     elif action in {"approve_answer", "reject_answer"} and status == "awaiting_answer_review":
         result = run_answer_review(root, action="approve" if action == "approve_answer" else "reject", session_id=session_id, reason=reason)
@@ -150,8 +152,16 @@ def render_action_controls(status: str) -> str:
         return action_form("export_handoff", "Export Agent Handoff", reason=True)
     if status == "ready_for_answer_prepare":
         return action_form("prepare_answer", "Prepare Answer Packet", reason=True)
-    if status in {"awaiting_answer_output", "answer_rejected"}:
-        return action_form("record_answer" if status == "awaiting_answer_output" else "record_revised_answer", "Record Answer", answer_text=True, reason=True)
+    if status in {"awaiting_answer_output", "answer_rejected", "answer_failed"}:
+        record_action = "record_answer" if status == "awaiting_answer_output" else "record_revised_answer"
+        run_action = "run_answer" if status == "awaiting_answer_output" else "rerun_answer"
+        return action_form(run_action, "Run Answer Command", command=True, reason=True, command_value="cat") + action_form(
+            record_action,
+            "Record Answer",
+            answer_text=True,
+            reason=True,
+            secondary=True,
+        )
     if status == "awaiting_answer_review":
         return action_form("approve_answer", "Approve Answer", reason=True) + action_form("reject_answer", "Reject Answer", reason=True, secondary=True)
     if status == "ready_for_execution_prepare":
@@ -172,13 +182,14 @@ def action_form(
     reason: bool = False,
     answer_text: bool = False,
     command: bool = False,
+    command_value: str = "python -c \"print('runtime artifact')\"",
     secondary: bool = False,
 ) -> str:
     fields = [f"<input type=\"hidden\" name=\"action\" value=\"{html.escape(action)}\">"]
     if answer_text:
         fields.append("<label>Answer text<br><textarea name=\"answer_text\" rows=\"8\"></textarea></label>")
     if command:
-        fields.append("<label>Command<br><input name=\"command\" value=\"python -c &quot;print('runtime artifact')&quot;\"></label>")
+        fields.append(f"<label>Command<br><input name=\"command\" value=\"{html.escape(command_value)}\"></label>")
         fields.append("<label>CWD<br><input name=\"cwd\" value=\"\"></label>")
     if reason:
         fields.append("<label>Reason<br><input name=\"reason\" value=\"\"></label>")
