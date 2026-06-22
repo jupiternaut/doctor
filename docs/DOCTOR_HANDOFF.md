@@ -37,7 +37,7 @@ Evidence from the latest local reports:
 | Hot context pack | Latest pack has 12 sources |
 | MCP surface | Live stdio smoke passed, 39 tools exposed |
 | Feedback loop | Replay health ok, latest expected top1 rate 0.833333 |
-| Codex++ integration | Default hook, Manager smoke, model-input review, answer-review handoff, and execution-review prepare passed |
+| Codex++ integration | Default hook, Manager smoke, model-input review, answer-review handoff, execution-review prepare, explicit command run, and artifact approval paths passed |
 | Safety | Access policy has 17 deny path patterns |
 | V1 acceptance | 8/10 stages ok; remaining items are time-gated semantic evidence |
 
@@ -156,6 +156,14 @@ uv run ./doctor v1-refresh \
   `execution_artifacts.md` paths back to the turn. This path prepares execution
   review only; it does not run local commands until the user reviews and approves
   the exact command or artifact step.
+- Codex++'s live injected task flow now supports the fourth review gate after
+  `execution_report.md` is prepared. A user message in the narrow form
+  `执行命令: <command>` or `run command: <command>` calls Doctor's
+  `execution-review --action run`, captures stdout/stderr/result JSON under the
+  session artifacts directory, and appends `execution_report.md` plus
+  `execution_artifacts.md` paths for review. A later explicit approval such as
+  approving the execution result calls `execution-review --action approve` and
+  marks the four-stage runtime session as complete.
 - Stage 4 now writes a unified `execution_artifacts.jsonl` and
   `execution_artifacts.md` with artifact paths, sizes, media types, and hashes.
 - A synthetic end-to-end runtime session
@@ -168,8 +176,9 @@ uv run ./doctor v1-refresh \
 ## Known Gaps
 
 - Warp interception for every task is still not wired as a native runtime
-  entrypoint, and Codex++ still needs native command-run/approve controls for the
-  execution gate after the live flow prepares `execution_report.md`.
+  entrypoint, and Codex++ still needs polished native panel controls for
+  execution run/approve. The current Codex++ execution flow works through
+  explicit live-turn triggers rather than a dedicated visual command panel.
 - User-facing UI is still weaker than OpenClaw, ChatGPT Projects, and Claude
   Code.
 - Metadata model is not yet as mature as DataHub or OpenMetadata.
