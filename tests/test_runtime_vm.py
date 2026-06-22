@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from agent_context.cli import main
-from agent_context.mcp_server import mcp_doctor_run, mcp_doctor_session
+from agent_context.mcp_server import (
+    mcp_doctor_answer_review,
+    mcp_doctor_context_review,
+    mcp_doctor_execution_review,
+    mcp_doctor_run,
+    mcp_doctor_runtime_acceptance,
+    mcp_doctor_session,
+)
 from agent_context.runtime_vm import inspect_runtime_session, start_runtime_session
 
 
@@ -96,6 +104,14 @@ def test_runtime_vm_cli_run_and_session(tmp_path: Path, capsys) -> None:
     assert session_result["session_id"] == "doctor-cli"
     assert session_result["files"]["doctor_session_md_path"].endswith("DOCTOR_SESSION.md")
 
+    assert main(["runtime-acceptance", "--out", str(out), "--session-id", "doctor-cli"]) == 0
+    acceptance_result = json.loads(capsys.readouterr().out)
+
+    assert acceptance_result["session_id"] == "doctor-cli"
+    assert acceptance_result["ready"] is False
+    assert acceptance_result["status"] == "awaiting_context_generation"
+    assert Path(acceptance_result["latest_md_path"]).exists()
+
 
 def test_runtime_vm_mcp_tools(tmp_path: Path) -> None:
     out = tmp_path / "out"
@@ -111,3 +127,97 @@ def test_runtime_vm_mcp_tools(tmp_path: Path) -> None:
     assert inspected["mcp_version"] == "0.1"
     assert inspected["status"] == "awaiting_context_generation"
     assert Path(inspected["files"]["doctor_session_md_path"]).exists()
+
+
+def test_runtime_vm_mcp_review_tools_advance_four_stage_session(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    started = mcp_doctor_run("审查 Doctor runtime VM 输入", session_id="doctor-mcp-flow", out_root=str(out))
+    session_dir = Path(started["session_dir"])
+    pack = out / "packs" / "runtime-flow"
+    pack.mkdir(parents=True)
+    model_input = pack / "model_input.md"
+    context_md = pack / "context.md"
+    sources = pack / "sources.jsonl"
+    manifest = pack / "manifest.json"
+    plan = pack / "resolution_plan.json"
+    model_input.write_text("# Model Input\n", encoding="utf-8")
+    context_md.write_text("# Context\n", encoding="utf-8")
+    sources.write_text("", encoding="utf-8")
+    manifest.write_text("{}", encoding="utf-8")
+    plan.write_text("{}", encoding="utf-8")
+    context_review_path = session_dir / "context_review.json"
+    context_review_path.write_text(
+        json.dumps(
+            {
+                "context_review_version": "0.1",
+                "stage": "resolve_review",
+                "status": "pending_review",
+                "action": "generate",
+                "session_id": "doctor-mcp-flow",
+                "reason": "",
+                "refined_prompt_md_path": str(session_dir / "refined_prompt.md"),
+                "refined_prompt": "任务目标：审查 Doctor runtime VM 输入",
+                "source_scope": "all",
+                "limit": 1,
+                "mode": "fast",
+                "preflight": {
+                    "status": "ok",
+                    "task_id": "runtime-flow",
+                    "model_input_md_path": str(model_input),
+                    "context_md_path": str(context_md),
+                    "sources_jsonl_path": str(sources),
+                    "manifest_json_path": str(manifest),
+                    "resolution_plan_json_path": str(plan),
+                    "preflight_markdown_path": str(pack / "codex_preflight.md"),
+                },
+                "context_review_json_path": str(context_review_path),
+                "context_review_md_path": str(session_dir / "context_review.md"),
+                "events_jsonl_path": str(session_dir / "context_review_events.jsonl"),
+                "global_feedback_jsonl_path": str(out / "feedback" / "context_review_feedback.jsonl"),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    context_approved = mcp_doctor_context_review(action="approve", session_id="doctor-mcp-flow", out_root=str(out))
+    assert context_approved["status"] == "approved"
+    assert context_approved["runtime_session"]["status"] == "ready_for_answer_prepare"
+
+    answer_prepared = mcp_doctor_answer_review(action="prepare", session_id="doctor-mcp-flow", out_root=str(out))
+    assert answer_prepared["status"] == "awaiting_answer"
+    assert answer_prepared["runtime_session"]["status"] == "awaiting_answer_output"
+
+    answer_recorded = mcp_doctor_answer_review(
+        action="record",
+        session_id="doctor-mcp-flow",
+        answer_text="The approved model input is ready for execution planning.",
+        out_root=str(out),
+    )
+    assert answer_recorded["status"] == "pending_review"
+    answer_approved = mcp_doctor_answer_review(action="approve", session_id="doctor-mcp-flow", out_root=str(out))
+    assert answer_approved["status"] == "approved"
+    assert answer_approved["runtime_session"]["status"] == "ready_for_execution_prepare"
+
+    execution_prepared = mcp_doctor_execution_review(action="prepare", session_id="doctor-mcp-flow", out_root=str(out))
+    assert execution_prepared["status"] == "awaiting_execution"
+    command = f"{sys.executable} -c \"print('runtime artifact')\""
+    execution_ran = mcp_doctor_execution_review(
+        action="run",
+        session_id="doctor-mcp-flow",
+        command=command,
+        cwd=str(tmp_path),
+        out_root=str(out),
+    )
+    assert execution_ran["status"] == "executed"
+    assert execution_ran["runtime_session"]["status"] == "awaiting_execution_review"
+    assert Path(execution_ran["commands"][-1]["stdout_path"]).read_text(encoding="utf-8").strip() == "runtime artifact"
+
+    execution_approved = mcp_doctor_execution_review(action="approve", session_id="doctor-mcp-flow", out_root=str(out))
+    assert execution_approved["status"] == "approved"
+    assert execution_approved["runtime_session"]["status"] == "complete"
+
+    acceptance = mcp_doctor_runtime_acceptance("doctor-mcp-flow", out_root=str(out))
+    assert acceptance["ready"] is True
+    assert acceptance["status"] == "complete"
+    assert Path(acceptance["latest_md_path"]).exists()

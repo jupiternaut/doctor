@@ -47,7 +47,7 @@ from .retrieval_eval import run_retrieval_eval
 from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_health import run_runtime_health, run_semantic_readiness
-from .runtime_vm import inspect_runtime_session, start_runtime_session
+from .runtime_vm import inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
 from .semantic import semantic_status
@@ -117,6 +117,10 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_session = subparsers.add_parser("session", help="Inspect a Doctor runtime session and write DOCTOR_SESSION.md.")
     doctor_session.add_argument("--session-id", required=True, help="Runtime session id to inspect.")
     doctor_session.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    runtime_acceptance = subparsers.add_parser("runtime-acceptance", help="Write a Doctor runtime VM acceptance handoff report.")
+    runtime_acceptance.add_argument("--session-id", required=True, help="Runtime session id to verify.")
+    runtime_acceptance.add_argument("--out", default=None, help="Output root. Overrides global --out.")
 
     resolve = subparsers.add_parser("resolve", help="Resolve a task goal into a hot context pack.")
     resolve.add_argument("--goal", required=True, help="Task goal to resolve into relevant local context.")
@@ -655,6 +659,8 @@ def main(argv: list[str] | None = None) -> int:
         result = start_runtime_session(out_root, args.goal, session_id=args.session_id, mode=args.mode)
     elif args.command == "session":
         result = inspect_runtime_session(out_root, args.session_id)
+    elif args.command == "runtime-acceptance":
+        result = run_runtime_vm_acceptance(out_root, args.session_id)
     elif args.command == "resolve":
         result = resolve_context(out_root, args.goal, limit=args.limit, source_scope=args.source_scope)
     elif args.command == "lab":

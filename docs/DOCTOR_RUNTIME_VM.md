@@ -24,6 +24,14 @@ doctor session \
   --session-id doctor-demo
 ```
 
+Write the acceptance handoff for the current session:
+
+```bash
+doctor runtime-acceptance \
+  --out /Users/gengrf/agent-context-system \
+  --session-id doctor-demo
+```
+
 The session entrypoint is:
 
 ```text
@@ -97,10 +105,37 @@ The MCP server exposes:
 
 - `doctor_run`: create a no-index runtime session
 - `doctor_session`: inspect and refresh `DOCTOR_SESSION.md`
+- `doctor_runtime_acceptance`: write the session acceptance handoff
+- `doctor_context_review`: generate, regenerate, approve, or reject `model_input.md`
+- `doctor_answer_review`: prepare, record, approve, or reject the answer packet
+- `doctor_execution_review`: prepare, run, record, approve, or reject local artifacts
 - existing resolver/search/read/build tools for the second stage
 
 This keeps Doctor usable by Codex++, Warp, Claude, Cursor, or any other MCP
 client without forcing every client to know the internal file layout.
+
+## Acceptance Handoff
+
+`runtime-acceptance` reads the current session files and writes:
+
+```text
+reports/runtime-vm-acceptance-<session-id>-<timestamp>.json
+reports/runtime-vm-acceptance-<session-id>-<timestamp>.md
+reports/runtime-vm-acceptance-latest.json
+reports/runtime-vm-acceptance-latest.md
+```
+
+The report checks:
+
+- `DOCTOR_SESSION.md` and `runtime_session.json` exist
+- stage 1 has `doctor_access=false`, `resolver_called=false`, and `index_access=false`
+- stage 2 has generated and approved `model_input.md`
+- stage 3 has recorded and approved an answer
+- stage 4 has run or recorded an artifact and approved the execution output
+- MCP exposes the runtime tools needed by external agents
+
+If a session is waiting for user review, the report stays incomplete and records
+the exact next command instead of pretending the runtime is accepted.
 
 ## Current Boundary
 
@@ -110,7 +145,8 @@ Implemented:
 - session status inspection
 - review-gated four-stage file contract
 - CLI alias through `doctor`
-- MCP session tools
+- MCP tools for all four review gates
+- acceptance handoff reports
 
 Still outside this shell:
 

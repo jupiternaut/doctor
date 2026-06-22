@@ -7,6 +7,7 @@ from typing import Any
 
 from .clarify import build_clarification
 from .io import write_text
+from .pack import slugify
 
 
 DOCTOR_RUNTIME_VERSION = "0.1"
@@ -61,12 +62,158 @@ def inspect_runtime_session(
     return result
 
 
+def run_runtime_vm_acceptance(out_root: str | Path, session_id: str) -> dict[str, Any]:
+    root = Path(out_root).expanduser().resolve()
+    session = inspect_runtime_session(root, session_id)
+    checks = runtime_acceptance_checks(session)
+    ready = all(check["status"] == "ok" for check in checks if check.get("required_for_complete"))
+    status = "complete" if ready else session["status"]
+    now = datetime.now().astimezone()
+    report_id = f"runtime-vm-acceptance-{slugify(session_id)}-{now.strftime('%Y%m%d%H%M%S%f')}"
+    reports_dir = root / "reports"
+    json_path = reports_dir / f"{report_id}.json"
+    md_path = reports_dir / f"{report_id}.md"
+    latest_json_path = reports_dir / "runtime-vm-acceptance-latest.json"
+    latest_md_path = reports_dir / "runtime-vm-acceptance-latest.md"
+    report = {
+        "doctor_runtime_acceptance_version": DOCTOR_RUNTIME_VERSION,
+        "status": status,
+        "ready": ready,
+        "created_at": now.isoformat(),
+        "session_id": session_id,
+        "out_root": str(root),
+        "session": session,
+        "checks": checks,
+        "mcp_tools": [
+            "doctor_run",
+            "doctor_session",
+            "doctor_runtime_acceptance",
+            "doctor_context_review",
+            "doctor_answer_review",
+            "doctor_execution_review",
+        ],
+        "json_path": str(json_path),
+        "md_path": str(md_path),
+        "latest_json_path": str(latest_json_path),
+        "latest_md_path": str(latest_md_path),
+    }
+    markdown = render_runtime_acceptance_markdown(report)
+    write_text(json_path, json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    write_text(md_path, markdown)
+    write_text(latest_json_path, json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    write_text(latest_md_path, markdown)
+    return report
+
+
 def persist_runtime_session(session: dict[str, Any]) -> None:
     files = session["files"]
     write_text(Path(files["runtime_session_json_path"]), json.dumps(session, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     markdown = render_session_markdown(session)
     write_text(Path(files["runtime_session_md_path"]), markdown)
     write_text(Path(files["doctor_session_md_path"]), markdown)
+
+
+def runtime_acceptance_checks(session: dict[str, Any]) -> list[dict[str, Any]]:
+    files = session["files"]
+    stages = {stage["name"]: stage for stage in session["stages"]}
+    context = stages["context_review"]
+    answer = stages["answer_review"]
+    execution = stages["execution_review"]
+    return [
+        file_check("session_entrypoint", "DOCTOR_SESSION.md exists", files["doctor_session_md_path"], required=True),
+        file_check("runtime_session_json", "runtime_session.json exists", files["runtime_session_json_path"], required=True),
+        file_check("refined_prompt", "Stage 1 refined prompt exists", files["refined_prompt_md_path"], required=True),
+        bool_check(
+            "clarify_no_index",
+            "Stage 1 did not access Doctor indexes or resolver",
+            bool(
+                stages["clarify"]["exists"]
+                and stages["clarify"].get("doctor_access") is False
+                and stages["clarify"].get("resolver_called") is False
+                and stages["clarify"].get("index_access") is False
+            ),
+            required=True,
+            evidence=stages["clarify"]["state_path"],
+        ),
+        bool_check(
+            "context_model_input",
+            "Stage 2 generated a reviewable model_input.md",
+            bool(context["exists"] and context.get("model_input_md_path") and Path(str(context["model_input_md_path"])).exists()),
+            required=True,
+            evidence=context.get("model_input_md_path") or context["state_path"],
+        ),
+        bool_check(
+            "context_approved",
+            "Stage 2 context payload is approved",
+            context["status"] == "approved",
+            required=True,
+            evidence=context["state_path"],
+        ),
+        bool_check(
+            "answer_packet",
+            "Stage 3 answer packet exists",
+            bool(answer["exists"] and Path(str(answer["review_path"])).exists()),
+            required=True,
+            evidence=answer["review_path"],
+        ),
+        bool_check(
+            "answer_recorded",
+            "Stage 3 recorded an answer for review",
+            bool(answer.get("answer_md_path") and Path(str(answer["answer_md_path"])).exists()),
+            required=True,
+            evidence=answer.get("answer_md_path") or answer["state_path"],
+        ),
+        bool_check(
+            "answer_approved",
+            "Stage 3 answer is approved",
+            answer["status"] == "approved",
+            required=True,
+            evidence=answer["state_path"],
+        ),
+        bool_check(
+            "execution_report",
+            "Stage 4 execution report exists",
+            bool(execution["exists"] and Path(str(execution["review_path"])).exists()),
+            required=True,
+            evidence=execution["review_path"],
+        ),
+        bool_check(
+            "execution_artifact",
+            "Stage 4 has a command run or external artifact",
+            bool((execution.get("command_count") or 0) > 0 or (execution.get("external_artifact_count") or 0) > 0),
+            required=True,
+            evidence=execution.get("artifacts_dir") or execution["state_path"],
+        ),
+        bool_check(
+            "execution_approved",
+            "Stage 4 execution output is approved",
+            execution["status"] == "approved",
+            required=True,
+            evidence=execution["state_path"],
+        ),
+    ]
+
+
+def file_check(check_id: str, description: str, path: str | None, *, required: bool) -> dict[str, Any]:
+    exists = bool(path and Path(path).exists())
+    return bool_check(check_id, description, exists, required=required, evidence=path)
+
+
+def bool_check(
+    check_id: str,
+    description: str,
+    ok: bool,
+    *,
+    required: bool,
+    evidence: str | None,
+) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "description": description,
+        "status": "ok" if ok else "missing",
+        "required_for_complete": required,
+        "evidence": evidence,
+    }
 
 
 def build_stage_states(root: Path, session_id: str) -> list[dict[str, Any]]:
@@ -375,6 +522,65 @@ def render_session_markdown(session: dict[str, Any]) -> str:
             "  execution_review_events.jsonl",
             "  artifacts/",
             "```",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_runtime_acceptance_markdown(report: dict[str, Any]) -> str:
+    session = report["session"]
+    lines = [
+        "---",
+        f"doctor_runtime_acceptance_version: {report['doctor_runtime_acceptance_version']}",
+        f"status: {report['status']}",
+        f"ready: {str(report['ready']).lower()}",
+        f"session_id: {report['session_id']}",
+        "---",
+        "",
+        "# Doctor Runtime VM Acceptance",
+        "",
+        "This report is the GitHub handoff for one Doctor runtime session. It verifies the four review gates from current files instead of inferring completion from intent.",
+        "",
+        "## Result",
+        "",
+        f"- Status: `{report['status']}`",
+        f"- Ready: `{str(report['ready']).lower()}`",
+        f"- Session: `{report['session_id']}`",
+        f"- Session entrypoint: `{session['files']['doctor_session_md_path']}`",
+        f"- Current review file: `{session['next'].get('review_file')}`",
+        f"- Next message: {session['next'].get('message')}",
+        "",
+        "## Checks",
+        "",
+    ]
+    for check in report["checks"]:
+        lines.append(f"- `{check['status']}` {check['id']}: {check['description']} (`{check.get('evidence')}`)")
+    lines.extend(
+        [
+            "",
+            "## MCP Surface",
+            "",
+        ]
+    )
+    lines.extend(f"- `{tool}`" for tool in report["mcp_tools"])
+    lines.extend(["", "## Next Commands", ""])
+    commands = session["next"].get("commands") or []
+    if commands:
+        lines.append("```bash")
+        lines.extend(commands)
+        lines.append("```")
+    else:
+        lines.append("_No next command._")
+    lines.extend(
+        [
+            "",
+            "## Report Files",
+            "",
+            f"- JSON: `{report['json_path']}`",
+            f"- Markdown: `{report['md_path']}`",
+            f"- Latest JSON: `{report['latest_json_path']}`",
+            f"- Latest Markdown: `{report['latest_md_path']}`",
             "",
         ]
     )

@@ -27,6 +27,25 @@ resolve_context(goal, limit=12, source_scope="all")
 resolve_alternative_context(goal, rejected_sources, reason="", limit=12, source_scope="all")
   Record rejected sources as negative feedback and resolve a replacement context pack.
 
+doctor_run(goal, session_id=null, mode="standard")
+  Start a Doctor runtime session with no-index clarification. This creates
+  runtime/sessions/<session-id>/DOCTOR_SESSION.md and does not call the resolver.
+
+doctor_session(session_id)
+  Inspect a Doctor runtime session and refresh DOCTOR_SESSION.md.
+
+doctor_runtime_acceptance(session_id)
+  Write reports/runtime-vm-acceptance-*.json/.md for one runtime session.
+
+doctor_context_review(action="generate", session_id=null, refined_prompt_path=null, reason="", source_scope="all", limit=12, mode="fast")
+  Generate, regenerate, approve, or reject the reviewable model_input.md payload.
+
+doctor_answer_review(action="prepare", session_id="", answer_text="", answer_file=null, reason="")
+  Prepare, record, approve, or reject the answer packet after context approval.
+
+doctor_execution_review(action="prepare", session_id="", command="", cwd=null, timeout_seconds=120, artifact_file=null, reason="")
+  Prepare, run, record, approve, or reject local execution artifacts after answer approval.
+
 search_context(query, limit=12)
   Query the cold index and write a RAG context pack.
 

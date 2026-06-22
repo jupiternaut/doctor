@@ -17,6 +17,12 @@ MCP_LIVE_SMOKE_VERSION = "0.1"
 REQUIRED_TOOLS = [
     "resolve_context",
     "read_source",
+    "doctor_run",
+    "doctor_session",
+    "doctor_runtime_acceptance",
+    "doctor_context_review",
+    "doctor_answer_review",
+    "doctor_execution_review",
     "context_panel",
     "record_panel_feedback",
     "semantic_index_status",

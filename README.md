@@ -128,13 +128,18 @@ doctor run \
 doctor session \
   --out /Users/gengrf/agent-context-system \
   --session-id <session-id>
+
+doctor runtime-acceptance \
+  --out /Users/gengrf/agent-context-system \
+  --session-id <session-id>
 ```
 
 It writes `runtime/sessions/<session-id>/DOCTOR_SESSION.md`,
 `runtime_session.json`, and `runtime_session.md`. That session file shows the
 current gate, the next review file, and the exact command that advances the
-runtime. See [Doctor Runtime VM](docs/DOCTOR_RUNTIME_VM.md) for the directory
-contract.
+runtime. `runtime-acceptance` writes a GitHub handoff report under
+`reports/runtime-vm-acceptance-*.md` plus latest copies. See
+[Doctor Runtime VM](docs/DOCTOR_RUNTIME_VM.md) for the directory contract.
 
 Stage 1 is a no-index clarification pass. It normalizes the user's natural
 language task into a reviewable prompt before Doctor is allowed to read local
@@ -512,7 +517,8 @@ uv run agent-context mcp --out /Users/gengrf/agent-context-system
 
 The MCP server exposes local tools for `resolve_context`, `search_context`,
 `index_context`, `refresh_providers`, `index_projects`,
-`doctor_run`, `doctor_session`,
+`doctor_run`, `doctor_session`, `doctor_runtime_acceptance`,
+`doctor_context_review`, `doctor_answer_review`, `doctor_execution_review`,
 `codebase_memory_index`, `codebase_memory_search`, `index_sessions`, `build_hot_pack`, `read_source`,
 `context_panel`, `record_feedback`, `record_panel_feedback`,
 `resolve_alternative_context`,

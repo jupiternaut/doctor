@@ -19,10 +19,13 @@ from .access_policy import (
 )
 from .acceptance import run_v1_acceptance, run_v1_followup, run_v1_refresh, run_v1_stage_status
 from .alternatives import resolve_alternative_context
+from .answer_review import run_answer_review
 from .codebase_memory import build_codebase_memory_index, search_codebase_memory
 from .codex_plus_smoke import run_codex_plus_smoke
 from .cold_index import build_cold_index, index_path_for, query_cold_index
+from .context_review import run_context_review
 from .embedding_benchmark import run_embedding_benchmark
+from .execution_review import run_execution_review
 from .feedback_replay import run_feedback_replay
 from .feedback_replay_cases import run_feedback_replay_case_maintenance
 from .feedback_replay_trend import run_feedback_replay_trend
@@ -51,7 +54,7 @@ from .retrieval_eval import run_retrieval_eval
 from .retrieval_eval_cases import run_retrieval_eval_case_maintenance
 from .route_selector import write_route_selector_model
 from .runtime_health import run_runtime_health, run_semantic_readiness
-from .runtime_vm import inspect_runtime_session, start_runtime_session
+from .runtime_vm import inspect_runtime_session, run_runtime_vm_acceptance, start_runtime_session
 from .semantic_index import run_semantic_refresh, semantic_index_status as read_semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
 from .session_index import build_session_index, session_index_path_for
@@ -154,6 +157,125 @@ def mcp_doctor_session(session_id: str, out_root: str | None = None) -> dict[str
         "mcp_version": MCP_VERSION,
         **inspect_runtime_session(resolve_out_root(out_root), session_id),
     }
+
+
+def mcp_doctor_runtime_acceptance(session_id: str, out_root: str | None = None) -> dict[str, Any]:
+    try:
+        return {
+            "mcp_version": MCP_VERSION,
+            **run_runtime_vm_acceptance(resolve_out_root(out_root), session_id),
+        }
+    except FileNotFoundError as exc:
+        return runtime_mcp_error("runtime_acceptance", "verify", session_id, exc)
+
+
+def mcp_doctor_context_review(
+    action: str = "generate",
+    session_id: str | None = None,
+    refined_prompt_path: str | None = None,
+    reason: str = "",
+    source_scope: str = "all",
+    limit: int = 12,
+    mode: str = "fast",
+    out_root: str | None = None,
+) -> dict[str, Any]:
+    root = resolve_out_root(out_root)
+    try:
+        review = run_context_review(
+            root,
+            action=action,
+            refined_prompt_path=refined_prompt_path,
+            session_id=session_id,
+            reason=reason,
+            source_scope=source_scope,
+            limit=max(1, limit),
+            mode=mode,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return runtime_mcp_error("context_review", action, session_id, exc)
+    return {
+        "mcp_version": MCP_VERSION,
+        **review,
+        "runtime_session": maybe_runtime_session(root, str(review.get("session_id") or session_id or "")),
+    }
+
+
+def mcp_doctor_answer_review(
+    action: str = "prepare",
+    session_id: str = "",
+    answer_text: str = "",
+    answer_file: str | None = None,
+    reason: str = "",
+    out_root: str | None = None,
+) -> dict[str, Any]:
+    root = resolve_out_root(out_root)
+    try:
+        review = run_answer_review(
+            root,
+            action=action,
+            session_id=session_id,
+            answer_text=answer_text,
+            answer_file=answer_file,
+            reason=reason,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return runtime_mcp_error("answer_review", action, session_id, exc)
+    return {
+        "mcp_version": MCP_VERSION,
+        **review,
+        "runtime_session": maybe_runtime_session(root, session_id),
+    }
+
+
+def mcp_doctor_execution_review(
+    action: str = "prepare",
+    session_id: str = "",
+    command: str = "",
+    cwd: str | None = None,
+    timeout_seconds: int = 120,
+    artifact_file: str | None = None,
+    reason: str = "",
+    out_root: str | None = None,
+) -> dict[str, Any]:
+    root = resolve_out_root(out_root)
+    try:
+        review = run_execution_review(
+            root,
+            action=action,
+            session_id=session_id,
+            command=command,
+            cwd=cwd,
+            timeout_seconds=max(1, timeout_seconds),
+            artifact_file=artifact_file,
+            reason=reason,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return runtime_mcp_error("execution_review", action, session_id, exc)
+    return {
+        "mcp_version": MCP_VERSION,
+        **review,
+        "runtime_session": maybe_runtime_session(root, session_id),
+    }
+
+
+def runtime_mcp_error(stage: str, action: str, session_id: str | None, exc: Exception) -> dict[str, Any]:
+    return {
+        "mcp_version": MCP_VERSION,
+        "status": "error",
+        "stage": stage,
+        "action": action,
+        "session_id": session_id,
+        "error": str(exc),
+    }
+
+
+def maybe_runtime_session(root: Path, session_id: str) -> dict[str, Any] | None:
+    if not session_id:
+        return None
+    try:
+        return inspect_runtime_session(root, session_id)
+    except FileNotFoundError:
+        return None
 
 
 def mcp_resolve_alternative_context(
@@ -1222,6 +1344,73 @@ def create_mcp_server(out_root: str | None = None) -> FastMCP:
     def doctor_session(session_id: str) -> dict[str, Any]:
         """Inspect a Doctor runtime session and write DOCTOR_SESSION.md."""
         return mcp_doctor_session(session_id=session_id, out_root=str(root))
+
+    @server.tool()
+    def doctor_runtime_acceptance(session_id: str) -> dict[str, Any]:
+        """Write a Doctor runtime VM acceptance handoff report."""
+        return mcp_doctor_runtime_acceptance(session_id=session_id, out_root=str(root))
+
+    @server.tool()
+    def doctor_context_review(
+        action: str = "generate",
+        session_id: str | None = None,
+        refined_prompt_path: str | None = None,
+        reason: str = "",
+        source_scope: str = "all",
+        limit: int = 12,
+        mode: str = "fast",
+    ) -> dict[str, Any]:
+        """Generate, regenerate, approve, or reject a Doctor context payload."""
+        return mcp_doctor_context_review(
+            action=action,
+            session_id=session_id,
+            refined_prompt_path=refined_prompt_path,
+            reason=reason,
+            source_scope=source_scope,
+            limit=limit,
+            mode=mode,
+            out_root=str(root),
+        )
+
+    @server.tool()
+    def doctor_answer_review(
+        action: str = "prepare",
+        session_id: str = "",
+        answer_text: str = "",
+        answer_file: str | None = None,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Prepare, record, approve, or reject a Doctor answer packet."""
+        return mcp_doctor_answer_review(
+            action=action,
+            session_id=session_id,
+            answer_text=answer_text,
+            answer_file=answer_file,
+            reason=reason,
+            out_root=str(root),
+        )
+
+    @server.tool()
+    def doctor_execution_review(
+        action: str = "prepare",
+        session_id: str = "",
+        command: str = "",
+        cwd: str | None = None,
+        timeout_seconds: int = 120,
+        artifact_file: str | None = None,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Prepare, run, record, approve, or reject local execution artifacts."""
+        return mcp_doctor_execution_review(
+            action=action,
+            session_id=session_id,
+            command=command,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            artifact_file=artifact_file,
+            reason=reason,
+            out_root=str(root),
+        )
 
     @server.tool()
     def resolve_alternative_context(
