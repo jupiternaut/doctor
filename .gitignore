@@ -7,6 +7,7 @@ __pycache__/
 # not accidentally publish extracted private files or context packs.
 extracted/
 feedback/
+catalog-shards/
 indexes/
 lab/
 manifests/
@@ -14,9 +15,14 @@ packs/
 providers/codebase_memory/
 queries/
 runtime/
+vault/
 reports/*
 !reports/.gitkeep
 !reports/github_reuse_report.md
+
+# Private local project inventory. Commit config/wiki_projects.example.json
+# instead, then copy it to config/wiki_projects.json locally.
+config/wiki_projects.json
 
 # Local runtime state and generated UI snapshots.
 logs/

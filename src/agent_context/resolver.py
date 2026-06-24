@@ -11,6 +11,7 @@ from .codebase_memory import codebase_memory_status, search_codebase_memory
 from .cold_index import search_cold_index
 from .evidence import attach_evidence_records
 from .feedback_model import feedback_boost_parts, load_feedback_model, query_family_for_text
+from .file_catalog import CatalogPaths, search_file_catalog
 from .grep_route import run_grep_route_probe
 from .io import ensure_dir, write_jsonl, write_text
 from .pack import slugify, snippet
@@ -25,6 +26,7 @@ from .retrieval_backends import FASTEMBED_BACKEND_ID, default_retrieval_config
 from .route_selector import load_route_selector_model, route_selector_boost_parts
 from .semantic_index import search_semantic_index, semantic_index_path_for
 from .session_index import search_session_index, session_index_path_for
+from .vault_index import search_vault_concepts, vault_index_path_for
 
 
 RESOLVER_VERSION = "0.5"
@@ -39,7 +41,9 @@ SOURCE_SCOPE_TO_SOURCE_IDS = {
     "codexSessions": ("codex_sessions",),
     "agentSessions": ("codex_sessions",),
     "workflowDocs": ("workflow_docs",),
-    "all": ("downloads_documents", "workflow_docs", "git_repositories", "codebase_memory", "codex_sessions"),
+    "vault": ("vault",),
+    "filesystem": ("root_file_catalog",),
+    "all": ("downloads_documents", "workflow_docs", "git_repositories", "codebase_memory", "codex_sessions", "root_file_catalog"),
 }
 
 
@@ -193,6 +197,7 @@ def build_resolution_plan(
         "semantic_ann_fallbacks": [],
         "semantic_ann_cache_statuses": [],
         "codebase_memory_errors": [],
+        "vault_errors": [],
     }
 
 
@@ -263,6 +268,10 @@ def source_registry(out_root: Path) -> list[dict[str, Any]]:
     db_path = out_root / "indexes" / "context.sqlite"
     project_db_path = project_index_path_for(out_root)
     session_db_path = session_index_path_for(out_root)
+    vault_db_path = vault_index_path_for(out_root)
+    vault_path = out_root / "vault"
+    file_catalog_root = file_catalog_root_for(out_root)
+    file_catalog_db = CatalogPaths.from_root(file_catalog_root).db if file_catalog_root else None
     codebase_memory = codebase_memory_status(out_root)
     workflows = filter_records_for_access(
         out_root,
@@ -333,7 +342,37 @@ def source_registry(out_root: Path) -> list[dict[str, Any]]:
             "strengths": ["external code graph", "search_code over indexed repositories", "Doctor extracted Markdown pseudo repo"],
             "weaknesses": ["requires optional codebase-memory-mcp binary and an explicit provider index refresh"],
         },
+        {
+            "source_id": "vault",
+            "kind": "llm_wiki_okf_vault",
+            "status": "indexed" if vault_db_path.exists() else "available" if vault_path.exists() else "missing",
+            "scope": str(vault_path),
+            "index_path": str(vault_db_path),
+            "strengths": ["approved project/entity/workflow concepts", "citations", "aliases", "freshness/confidence metadata"],
+            "weaknesses": ["only reflects approved vault concepts; raw files require provider expansion"],
+        },
+        {
+            "source_id": "root_file_catalog",
+            "kind": "filesystem_metadata_catalog",
+            "status": "indexed" if file_catalog_db and file_catalog_db.exists() else "missing",
+            "scope": str(file_catalog_root) if file_catalog_root else "",
+            "index_path": str(file_catalog_db) if file_catalog_db else "",
+            "strengths": ["whole-machine path discovery", "source_zone labels", "source_weight priors", "logical path deduplication"],
+            "weaknesses": ["metadata/path only; does not prove file contents are relevant"],
+        },
     ]
+
+
+def file_catalog_root_for(out_root: Path) -> Path | None:
+    candidates = [
+        out_root / "catalog-shards" / "root-full",
+        out_root / "catalog-shards" / "home-full",
+        out_root,
+    ]
+    for candidate in candidates:
+        if CatalogPaths.from_root(candidate).db.exists():
+            return candidate
+    return None
 
 def normalize_source_scope(source_scope: str) -> str:
     return source_scope if source_scope in SOURCE_SCOPE_TO_SOURCE_IDS else "all"
@@ -404,10 +443,41 @@ def select_sources(
         add("downloads_documents", "goal explicitly mentions Downloads or downloaded files")
     if "workflow" in goal.lower() or "上下文" in goal or "热包" in goal:
         add("workflow_docs", "goal mentions workflow/context; local docs are high-signal")
+    if should_use_file_catalog(goal):
+        add("root_file_catalog", "goal may require whole-machine path discovery and source-zone routing")
 
     if not selected and "downloads_documents" in available:
         add("downloads_documents", "fallback to the existing indexed local source")
-    return selected[:4], reasons
+    if not selected and "root_file_catalog" in available:
+        add("root_file_catalog", "fallback to the whole-machine metadata catalog")
+    return selected[:5], reasons
+
+
+def should_use_file_catalog(goal: str) -> bool:
+    lower = goal.lower()
+    markers = (
+        "本地",
+        "电脑",
+        "全盘",
+        "硬盘",
+        "文件",
+        "目录",
+        "路径",
+        "安装",
+        "工具",
+        "应用",
+        "软件",
+        "project",
+        "项目",
+        "repo",
+        "codex",
+        "doctor",
+        "mirror",
+        "plm",
+        "drama",
+        "gugu",
+    )
+    return any(marker in lower for marker in markers)
 
 
 def grep_provider_scores(grep_route_probe: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
@@ -436,6 +506,8 @@ def refresh_action_for(source_id: str, candidates: list[dict[str, Any]]) -> str:
         return "reuse_codebase_memory_provider" if status == "indexed" else "run_codebase-memory-index_or_install_codebase-memory-mcp"
     if source_id == "codex_sessions":
         return "reuse_session_index" if status == "indexed" else "refresh_provider_manifest"
+    if source_id == "vault":
+        return "reuse_vault_index" if status == "indexed" else "run_vault-index_after_wiki_approval"
     return "read_current_files"
 
 
@@ -488,6 +560,10 @@ def retrieve_candidates_for_plan(out_root: Path, plan: dict[str, Any]) -> list[d
     if "codex_sessions" in plan["selected_sources"]:
         candidates.extend(session_index_candidates(out_root, plan))
         candidates.extend(session_candidates(out_root, plan))
+    if "vault" in plan["selected_sources"]:
+        candidates.extend(vault_candidates(out_root, plan))
+    if "root_file_catalog" in plan["selected_sources"]:
+        candidates.extend(file_catalog_candidates(out_root, plan))
 
     candidates.extend(semantic_index_candidates(out_root, plan))
     return filter_records_for_access(out_root, candidates, audit_action="resolver_filter_candidates")
@@ -828,6 +904,154 @@ def session_candidates(out_root: Path, plan: dict[str, Any]) -> list[dict[str, A
     return candidates
 
 
+def vault_candidates(out_root: Path, plan: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates = []
+    for query in plan["queries"]:
+        try:
+            result = search_vault_concepts(
+                out_root,
+                query,
+                limit=max(20, plan["constraints"]["max_context_sources"] * 4),
+            )
+        except Exception as exc:  # noqa: BLE001 - vault is optional in the generic resolver path.
+            plan.setdefault("vault_errors", []).append(f"{query}: {type(exc).__name__}: {exc}")
+            continue
+        for source in result.get("sources") or []:
+            candidate = dict(source)
+            candidate["type"] = "vault_concept"
+            candidate["source_group"] = "vault"
+            candidate["matched_queries"] = [query]
+            candidate["retrieval_query"] = query
+            candidate["retrieval_channel"] = "vault_index"
+            candidates.append(candidate)
+    return candidates
+
+
+def file_catalog_candidates(out_root: Path, plan: dict[str, Any]) -> list[dict[str, Any]]:
+    catalog_root = file_catalog_root_for(out_root)
+    if not catalog_root:
+        return []
+    candidates = []
+    limit = max(20, plan["constraints"]["max_context_sources"] * 4)
+    for query in plan["queries"]:
+        try:
+            result = search_file_catalog(catalog_root, query, limit=limit)
+        except Exception as exc:  # noqa: BLE001 - file map should not break resolver.
+            plan.setdefault("file_catalog_errors", []).append(f"{query}: {type(exc).__name__}: {exc}")
+            continue
+        for index, source in enumerate(result.get("results") or []):
+            source_weight = safe_float(source.get("source_weight"))
+            source_zone = source.get("source_zone") or "root"
+            task_source_zone_weight = source_zone_task_weight(source_zone, plan.get("goal", ""))
+            retrieval = max(0.15, 1.0 - index * 0.025)
+            weighted_score = round(retrieval * (0.60 + min(max(task_source_zone_weight, 0.0), 1.0) * 0.40), 6)
+            path = source.get("path") or source.get("logical_path")
+            logical_path = source.get("logical_path") or path
+            candidates.append(
+                {
+                    "type": "file_catalog_entry",
+                    "source_id": f"file_catalog:{logical_path}",
+                    "doc_id": logical_path,
+                    "path": path,
+                    "logical_path": logical_path,
+                    "relative_path": logical_path,
+                    "source_group": "root_file_catalog",
+                    "source_zone": source_zone,
+                    "source_weight": source_weight,
+                    "task_source_zone_weight": task_source_zone_weight,
+                    "kind": source.get("kind"),
+                    "suffix": source.get("suffix"),
+                    "size": source.get("size"),
+                    "mtime_ns": source.get("mtime_ns"),
+                    "score": weighted_score,
+                    "score_parts": {
+                        "file_catalog": weighted_score,
+                        "source_weight": round(source_weight, 6),
+                        "task_source_zone_weight": round(task_source_zone_weight, 6),
+                        "fts_rank": round(safe_float(source.get("rank")), 6),
+                    },
+                    "snippet": file_catalog_snippet(source),
+                    "matched_queries": [query],
+                    "retrieval_query": query,
+                    "retrieval_channel": "file_catalog_fts",
+                }
+            )
+    return candidates
+
+
+def file_catalog_snippet(source: dict[str, Any]) -> str:
+    path = source.get("logical_path") or source.get("path") or ""
+    return (
+        "Filesystem metadata hit; "
+        f"zone={source.get('source_zone', 'root')}; "
+        f"kind={source.get('kind', 'unknown')}; "
+        f"suffix={source.get('suffix', '')}; "
+        f"size={source.get('size', 0)}; "
+        f"path={path}. "
+        "This catalog entry proves the path exists; read or ingest the file before treating content as evidence."
+    )
+
+
+def source_zone_task_weight(source_zone: str, goal: str) -> float:
+    lower = goal.lower()
+    if any(marker in lower for marker in ("安装", "应用", "软件", "app", "application", "tool", "工具", "在哪里", "在哪")):
+        weights = {
+            "applications": 1.0,
+            "developer_tools": 0.9,
+            "user_projects": 0.6,
+            "user_home": 0.55,
+            "user_library": 0.55,
+            "system_library": 0.45,
+            "unix_system": 0.4,
+            "agent_history": 0.3,
+            "dev_cache": 0.12,
+            "trash": 0.03,
+        }
+        return weights.get(source_zone, 0.2)
+    if any(marker in lower for marker in ("项目", "project", "repo", "代码", "简历", "作品", "github", "构建", "实现")):
+        weights = {
+            "user_projects": 1.0,
+            "agent_history": 0.78,
+            "user_home": 0.72,
+            "user_library": 0.48,
+            "applications": 0.38,
+            "developer_tools": 0.35,
+            "system_library": 0.25,
+            "unix_system": 0.2,
+            "dev_cache": 0.08,
+            "trash": 0.03,
+        }
+        return weights.get(source_zone, 0.2)
+    if any(marker in lower for marker in ("系统", "环境", "命令", "binary", "bin", "配置", "权限")):
+        weights = {
+            "unix_system": 0.95,
+            "system_library": 0.8,
+            "developer_tools": 0.75,
+            "applications": 0.65,
+            "user_library": 0.55,
+            "user_projects": 0.45,
+            "user_home": 0.45,
+            "dev_cache": 0.25,
+            "agent_history": 0.2,
+            "trash": 0.02,
+        }
+        return weights.get(source_zone, 0.2)
+    if any(marker in lower for marker in ("文档", "资料", "文章", "图片", "视频", "文件")):
+        weights = {
+            "user_home": 0.95,
+            "user_projects": 0.82,
+            "user_library": 0.65,
+            "agent_history": 0.55,
+            "applications": 0.25,
+            "system_library": 0.2,
+            "unix_system": 0.15,
+            "dev_cache": 0.08,
+            "trash": 0.03,
+        }
+        return weights.get(source_zone, 0.2)
+    return safe_float({"user_projects": 1.0, "user_home": 0.9, "agent_history": 0.85, "user_library": 0.55, "applications": 0.5}.get(source_zone, 0.2))
+
+
 def matched_queries_for_text(queries: list[str], haystack: str) -> list[str]:
     matched = []
     for query in queries:
@@ -872,7 +1096,9 @@ def fuse_candidates(
         query_coverage = query_coverage_for(candidate)
         source_weight = source_prior(candidate)
         feedback_parts = feedback_boost_parts(feedback_model, candidate, query_family=query_family)
-        feedback = feedback_parts["total"]
+        # Vault candidates already include feedback in their provider score. Do not
+        # apply the same prior twice in the generic resolver fusion step.
+        feedback = 0.0 if candidate.get("source_group") == "vault" else feedback_parts["total"]
         route_selector_parts = route_selector_boost_parts(route_selector_model, candidate, query_family=query_family)
         route_selector_prior = route_selector_parts["total"]
         grep_parts = grep_route_boost_parts(grep_route_probe, candidate)
@@ -962,8 +1188,11 @@ def source_prior(candidate: dict[str, Any]) -> float:
     group = candidate.get("source_group")
     if group == "workflow_docs":
         return 0.8
-    if group in {"downloads_documents", "git_repositories", "codebase_memory", "codex_sessions"}:
+    if group in {"downloads_documents", "git_repositories", "codebase_memory", "codex_sessions", "vault"}:
         return 0.6
+    if group == "root_file_catalog":
+        task_weight = candidate.get("task_source_zone_weight", candidate.get("source_weight"))
+        return min(0.8, max(0.0, safe_float(task_weight)))
     return 0.0
 
 
@@ -1019,13 +1248,20 @@ def why_selected(candidate: dict[str, Any]) -> str:
     queries = ", ".join(candidate.get("matched_queries", [])[:2])
     group = candidate.get("source_group", "unknown")
     parts = candidate.get("resolver_score_parts", {})
+    zone = candidate.get("source_zone")
+    zone_text = (
+        f"; source_zone={zone}; source_weight={candidate.get('source_weight')}"
+        f"; task_source_zone_weight={candidate.get('task_source_zone_weight')}"
+        if zone
+        else ""
+    )
     return (
         f"selected from {group}; matched {len(candidate.get('matched_queries', []))} resolver query/query group(s)"
         f"; retrieval={parts.get('retrieval', 0)}; query_coverage={parts.get('query_coverage', 0)}"
         f"; feedback={parts.get('feedback', 0)}"
         f"; route_selector={parts.get('route_selector', 0)}"
         f"; grep_route={parts.get('grep_route', 0)}"
-        f"; queries={queries}"
+        f"{zone_text}; queries={queries}"
     )
 
 
@@ -1069,16 +1305,21 @@ def project_diversity_cap_for(limit: int) -> int:
 def retrieval_stats(candidates: list[dict[str, Any]], sources: list[dict[str, Any]]) -> dict[str, Any]:
     by_source: dict[str, int] = {}
     by_channel: dict[str, int] = {}
+    by_source_zone: dict[str, int] = {}
     for candidate in candidates:
         group = candidate.get("source_group", "unknown")
         by_source[group] = by_source.get(group, 0) + 1
         channel = candidate.get("retrieval_channel") or candidate.get("provider") or candidate.get("type") or "unknown"
         by_channel[channel] = by_channel.get(channel, 0) + 1
+        if candidate.get("source_zone"):
+            zone = str(candidate.get("source_zone"))
+            by_source_zone[zone] = by_source_zone.get(zone, 0) + 1
     return {
         "candidates_considered": len(candidates),
         "sources_included": len(sources),
         "candidate_count_by_source": by_source,
         "candidate_count_by_channel": by_channel,
+        "candidate_count_by_source_zone": by_source_zone,
     }
 
 
@@ -1123,8 +1364,10 @@ def render_context(goal: str, created_at: str, plan: dict[str, Any], sources: li
     lines.extend(["", "# Top Sources", ""])
     if sources:
         for source in sources:
+            display_path = source.get("logical_path") or source["path"]
+            zone = f", zone={source.get('source_zone')}" if source.get("source_zone") else ""
             lines.append(
-                f"- `{source['path']}` ({source.get('source_group')}, score={source['score']}, why={source['why_selected']})"
+                f"- `{display_path}` ({source.get('source_group')}{zone}, score={source['score']}, why={source['why_selected']})"
             )
     else:
         lines.append("- No source matched the resolver plan.")
@@ -1135,6 +1378,13 @@ def render_context(goal: str, created_at: str, plan: dict[str, Any], sources: li
             lines.append(f"> {source.get('snippet', '')}")
             lines.append(">")
             lines.append(f"> Source: `{source['path']}`")
+            if source.get("logical_path"):
+                lines.append(f"> Logical path: `{source['logical_path']}`")
+            if source.get("source_zone"):
+                lines.append(
+                    f"> Source zone: `{source['source_zone']}`; source weight: `{source.get('source_weight')}`; "
+                    f"task zone weight: `{source.get('task_source_zone_weight')}`"
+                )
             lines.append("")
     else:
         lines.append("- The resolver produced no snippets; inspect `resolution_plan.json` for selected sources and queries.")

@@ -71,6 +71,53 @@ def test_codex_preflight_calls_resolver_and_returns_markdown_paths(
     assert "hidden platform or client system prompts" in model_input
 
 
+def test_codex_preflight_deep_mode_includes_core_project_concepts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    out = tmp_path / "out"
+    concept_dir = out / "vault" / "projects"
+    concept_dir.mkdir(parents=True)
+    (concept_dir / "project-plm.md").write_text("# PLM Concept\n\nPlotPilot deep evidence.", encoding="utf-8")
+
+    def fake_resolve_context(out_root: Path, goal: str, limit: int, source_scope: str) -> dict:
+        pack = out_root / "packs" / "task-resolve-20260615120000"
+        pack.mkdir(parents=True, exist_ok=True)
+        (pack / "context.md").write_text("# Context Pack\n\nLocal Doctor evidence.", encoding="utf-8")
+        return {
+            "resolver_version": "0.4",
+            "route": "rule_based_v0",
+            "task_id": "task-resolve-20260615120000",
+            "goal": goal,
+            "intent": "project_code",
+            "source_scope": source_scope,
+            "selected_sources": ["git_repositories"],
+            "queries": [goal],
+            "context_md_path": str(pack / "context.md"),
+            "sources_jsonl_path": str(pack / "sources.jsonl"),
+            "manifest_json_path": str(pack / "manifest.json"),
+            "resolution_plan_json_path": str(pack / "resolution_plan.json"),
+            "sources_included": 1,
+        }
+
+    monkeypatch.setattr("agent_context.codex_hook.resolve_context", fake_resolve_context)
+
+    result = build_codex_preflight(
+        out,
+        "prepare local coding task",
+        source_scope="gitProjects",
+        limit=5,
+        auto_context=True,
+        mode="deep",
+    )
+
+    model_input = Path(result["model_input_md_path"]).read_text(encoding="utf-8")
+    assert "target_context_budget: 10k-20k tokens" in model_input
+    assert "Doctor Core Project Concepts" in model_input
+    assert "project-plm" in model_input
+    assert "PlotPilot deep evidence." in model_input
+
+
 def test_codex_preflight_separates_model_prompt_from_retrieval_goal(
     tmp_path: Path,
     monkeypatch,

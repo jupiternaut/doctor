@@ -91,6 +91,7 @@ def build_feedback_model(out_root: Path, *, persist: bool = True) -> dict[str, A
     apply_mcp_feedback(out_root, source_scores, related_keys, query_family_source_scores)
     apply_panel_feedback(out_root, source_scores, related_keys, query_family_source_scores)
     apply_alternative_feedback(out_root, source_scores, related_keys, query_family_source_scores)
+    apply_mirror_feedback(out_root, source_scores, related_keys, query_family_source_scores)
     replay_supervision_cases = apply_replay_supervision(
         out_root,
         source_scores,
@@ -459,6 +460,25 @@ def apply_alternative_feedback(
         delta = rating_delta(record.get("rating"), default=0.08)
         rejected_sources = record.get("rejected_sources") or record.get("rejected_source") or []
         keys = feedback_source_keys(rejected_sources)
+        apply_source_keys_delta(source_scores, keys, delta, related_keys)
+        if family_source_scores is not None:
+            apply_source_keys_delta(family_source_scores, keys, delta, related_keys)
+
+
+def apply_mirror_feedback(
+    out_root: Path,
+    source_scores: dict[str, float],
+    related_keys: dict[str, list[str]],
+    query_family_source_scores: dict[str, dict[str, float]],
+) -> None:
+    for record in read_jsonl(out_root / "feedback" / "mirror_feedback.jsonl"):
+        query_family = record_query_family(record)
+        family_source_scores = query_family_source_scores.setdefault(query_family, {}) if query_family else None
+        label = record.get("label") or record.get("rating") or record.get("preference")
+        delta = rating_delta(label, default=0.05)
+        target = record.get("target") or record.get("selected_source") or record.get("source")
+        keys = feedback_source_keys(target)
+        keys.extend(candidate_source_keys(record))
         apply_source_keys_delta(source_scores, keys, delta, related_keys)
         if family_source_scores is not None:
             apply_source_keys_delta(family_source_scores, keys, delta, related_keys)

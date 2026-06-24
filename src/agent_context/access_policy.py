@@ -21,6 +21,7 @@ DEFAULT_ALLOWED_PROVIDERS = [
     "project_code_index",
     "session_index",
     "semantic_index",
+    "vault_index",
     "codebase_memory",
     "git_project",
     "workflow_doc",

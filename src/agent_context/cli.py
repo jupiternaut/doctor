@@ -20,6 +20,7 @@ from .context_review import run_context_review
 from .embedding_benchmark import run_embedding_benchmark
 from .execution_review import run_execution_review
 from .evidence_index import build_evidence_index, search_evidence_index
+from .file_catalog import build_file_catalog, search_file_catalog
 from .feedback_model import write_feedback_model
 from .feedback_replay import run_feedback_replay
 from .feedback_replay_cases import run_feedback_replay_case_maintenance
@@ -36,6 +37,7 @@ from .launchd import (
     semantic_launchd_status,
     wait_for_semantic_launchd_run,
 )
+from .llm_wiki import run_wiki_command
 from .mcp_live_smoke import run_mcp_live_smoke
 from .mcp_server import mcp_grant_access_consent, run_mcp_server
 from .pack import build_context_pack
@@ -57,9 +59,10 @@ from .semantic_index import run_semantic_refresh, semantic_index_status
 from .semantic_maintenance import run_semantic_ann_prune, run_semantic_maintenance
 from .semantic import semantic_status
 from .session_index import build_session_index
+from .vault_index import build_vault_index, resolve_vault_context, run_vault_anytime_step, run_vault_check, run_wiki_baseline_eval
 
 
-SOURCE_SCOPE_CHOICES = ["downloads", "gitProjects", "codebaseMemory", "codexSessions", "agentSessions", "workflowDocs", "all"]
+SOURCE_SCOPE_CHOICES = ["downloads", "gitProjects", "codebaseMemory", "codexSessions", "agentSessions", "workflowDocs", "vault", "filesystem", "all"]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -106,6 +109,18 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_search.add_argument("--query", required=True, help="Natural-language or keyword query.")
     evidence_search.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     evidence_search.add_argument("--limit", type=int, default=12, help="Maximum evidence records to return.")
+
+    file_catalog = subparsers.add_parser("file-catalog", help="Build a local filesystem metadata catalog.")
+    file_catalog.add_argument("--scope", action="append", default=None, help="File catalog scope. Can be passed more than once. Defaults to the current user's home directory.")
+    file_catalog.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    file_catalog.add_argument("--reset", action="store_true", help="Recreate indexes/files.sqlite before cataloging.")
+    file_catalog.add_argument("--max-entries", type=int, default=0, help="Maximum entries to index. 0 means no limit.")
+    file_catalog.add_argument("--batch-size", type=int, default=2000, help="SQLite insert batch size.")
+
+    file_search = subparsers.add_parser("file-search", help="Search the local filesystem metadata catalog.")
+    file_search.add_argument("--query", required=True, help="Filename or path query.")
+    file_search.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    file_search.add_argument("--limit", type=int, default=20, help="Maximum catalog entries to return.")
 
     clarify = subparsers.add_parser("clarify", help="Normalize a user task without reading Doctor indexes.")
     clarify.add_argument("--goal", required=True, help="Original user task to normalize for review.")
@@ -532,7 +547,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     codex_plus_smoke = subparsers.add_parser("codex-plus-smoke", help="Run Codex++ Agent Context smoke scripts and write a report.")
     codex_plus_smoke.add_argument("--out", default=None, help="Output root. Overrides global --out.")
-    codex_plus_smoke.add_argument("--codex-plus-root", default=None, help="Codex++ repo root. Defaults to the known local checkout.")
+    codex_plus_smoke.add_argument("--codex-plus-root", default=None, help="Codex++ repo root. Defaults to DOCTOR_CODEX_PLUS_ROOT or CODEX_PLUS_ROOT when set.")
     codex_plus_smoke.add_argument("--timeout-seconds", type=int, default=120, help="Maximum seconds per smoke script.")
     codex_plus_smoke.add_argument("--with-manager-feedback", action="store_true", help="Also run the Manager feedback replay contract smoke.")
     codex_plus_smoke.add_argument("--with-runtime", action="store_true", help="Also run the Codex++ GUI runtime smoke; this may launch Codex.app.")
@@ -688,6 +703,57 @@ def build_parser() -> argparse.ArgumentParser:
     access_audit.add_argument("--out", default=None, help="Output root. Overrides global --out.")
     access_audit.add_argument("--limit", type=int, default=50, help="Maximum recent audit events to return.")
 
+    wiki = subparsers.add_parser("wiki", help="Compile and approve the Doctor LLM-Wiki / OKF vault.")
+    wiki.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    wiki.add_argument(
+        "--action",
+        choices=["init", "compile-baseline", "approve", "reject", "baseline", "seed-entities", "correct-entity", "contradiction", "baseline-report"],
+        default="baseline",
+        help="Vault action. baseline runs init plus compile, and approves only with --approve.",
+    )
+    wiki.add_argument("--diff-id", default="baseline-projects", help="Brain Diff id or compact payload for governance actions.")
+    wiki.add_argument("--approve", action="store_true", help="For --action baseline, approve the generated diff after staging it.")
+    wiki.add_argument("--reason", default="", help="Human rejection reason for --action reject.")
+    wiki.add_argument("--failure", action="store_true", help="For --action reject, also write a canonical failure concept.")
+    wiki.add_argument("--goal", action="append", default=None, help="Goal to include for --action baseline-report. Repeat for multiple goals.")
+    wiki.add_argument(
+        "--project-config",
+        default=None,
+        help="Project inventory JSON for baseline actions. Defaults to config/wiki_projects.json under --out.",
+    )
+
+    vault_index = subparsers.add_parser("vault-index", help="Build indexes/vault.sqlite from canonical LLM-Wiki / OKF Vault Markdown.")
+    vault_index.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    vault_check = subparsers.add_parser("vault-check", help="Validate LLM-Wiki / OKF Vault frontmatter and derived index integrity.")
+    vault_check.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    vault_check.add_argument("--rebuild", action="store_true", help="Rebuild indexes/vault.sqlite before checking integrity.")
+
+    vault_resolve = subparsers.add_parser("vault-resolve", help="Resolve a task against the LLM-Wiki / OKF Vault and write a bounded hot context.")
+    vault_resolve.add_argument("--goal", required=True, help="Task goal to resolve against the vault.")
+    vault_resolve.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    vault_resolve.add_argument("--limit", type=int, default=8, help="Maximum vault concepts to include.")
+    vault_resolve.add_argument("--mode", choices=["fast", "slow", "anytime"], default="fast", help="Resolver mode metadata.")
+    vault_resolve.add_argument("--continue-from", default=None, help="Optional vault/anytime/*/state.json to update before resolving.")
+    vault_resolve.add_argument(
+        "--feedback",
+        choices=["neutral", "satisfied", "not_right"],
+        default="neutral",
+        help="Feedback for --continue-from.",
+    )
+
+    vault_anytime_step = subparsers.add_parser("vault-anytime-step", help="Run one bounded slow-answer expansion step from a vault anytime state.")
+    vault_anytime_step.add_argument("--state", required=True, help="Path to vault/anytime/*/state.json.")
+    vault_anytime_step.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    vault_anytime_step.add_argument(
+        "--feedback",
+        choices=["neutral", "satisfied", "not_right"],
+        default="not_right",
+        help="Feedback that triggered this step.",
+    )
+    vault_anytime_step.add_argument("--limit", type=int, default=12, help="Maximum expanded source files to include.")
+    vault_anytime_step.add_argument("--max-files-per-root", type=int, default=80, help="Maximum text files to scan per source root.")
+
     mcp = subparsers.add_parser("mcp", help="Run the agent-context MCP server over stdio.")
     mcp.add_argument("--out", default=None, help="Output root. Overrides global --out.")
 
@@ -729,6 +795,16 @@ def main(argv: list[str] | None = None) -> int:
         result = build_evidence_index(out_root)
     elif args.command == "evidence-search":
         result = search_evidence_index(out_root, args.query, limit=max(1, args.limit))
+    elif args.command == "file-catalog":
+        result = build_file_catalog(
+            out_root,
+            [Path(value) for value in (args.scope or [str(Path.home())])],
+            reset=args.reset,
+            max_entries=max(0, args.max_entries),
+            batch_size=max(1, args.batch_size),
+        )
+    elif args.command == "file-search":
+        result = search_file_catalog(out_root, args.query, limit=max(1, args.limit))
     elif args.command == "clarify":
         result = build_clarification(out_root, args.goal, session_id=args.session_id, mode=args.mode, image_paths=args.image or [])
     elif args.command == "run":
@@ -1362,6 +1438,40 @@ def main(argv: list[str] | None = None) -> int:
         result = mcp_grant_access_consent(args.identifier, reason=args.reason, out_root=str(out_root))
     elif args.command == "access-audit":
         result = read_access_audit(out_root, limit=args.limit)
+    elif args.command == "wiki":
+        if args.action == "baseline-report":
+            result = run_wiki_baseline_eval(out_root, goals=args.goal)
+        else:
+            result = run_wiki_command(
+                out_root,
+                action=args.action,
+                diff_id=args.diff_id,
+                approve=args.approve,
+                reason=args.reason,
+                failure=args.failure,
+                project_config=Path(args.project_config) if args.project_config else None,
+            )
+    elif args.command == "vault-index":
+        result = build_vault_index(out_root)
+    elif args.command == "vault-check":
+        result = run_vault_check(out_root, rebuild=args.rebuild)
+    elif args.command == "vault-resolve":
+        result = resolve_vault_context(
+            out_root,
+            args.goal,
+            limit=args.limit,
+            mode=args.mode,
+            continue_from=Path(args.continue_from) if args.continue_from else None,
+            feedback=args.feedback,
+        )
+    elif args.command == "vault-anytime-step":
+        result = run_vault_anytime_step(
+            out_root,
+            Path(args.state),
+            feedback=args.feedback,
+            limit=max(1, args.limit),
+            max_files_per_root=max(1, args.max_files_per_root),
+        )
     elif args.command == "mcp-live-smoke":
         result = run_mcp_live_smoke(
             out_root,

@@ -26,6 +26,9 @@ raw files
 - [Doctor Runtime VM](docs/DOCTOR_RUNTIME_VM.md)
 - [Doctor Douyin v0.1](docs/DOCTOR_DOUYIN_V0_1.md)
 - [Doctor Lab](docs/DOCTOR_LAB.md)
+- [Open Source Release Boundary](docs/OPEN_SOURCE_RELEASE_BOUNDARY.md)
+- [LLM-Wiki / OKF Vault Baseline](docs/LLM_WIKI_OKF_BASELINE.md)
+- [Vault Resolver](docs/VAULT_RESOLVER.md)
 - [Context MoE Interface](docs/CONTEXT_MOE_INTERFACE.md)
 - [Doctor Runtime OpenSpec](openspec/changes/doctor-runtime-macos-context/proposal.md)
 - [Architecture Context](docs/ARCHITECTURE_CONTEXT.md)
@@ -67,6 +70,13 @@ green smoke test.
 `v1-acceptance` folds the latest runtime health, semantic readiness, MCP live
 smoke, and reproducibility snapshot into one handoff report under
 `reports/v1-acceptance-latest.md`.
+The LLM-Wiki / OKF Vault slice now supports staged approval and rejection,
+`vault-check` integrity checks, `vault-resolve` fast/anytime context packs, and
+an explicit `resolve --source-scope vault` provider path for reviewing approved
+long-term knowledge before it is mixed with raw documents or project indexes.
+It also writes `indexes/knowledge.sqlite`, exports graph edges, records entity
+merge/split corrections and contradiction concepts, and produces a baseline
+comparison report for raw search vs existing packs vs vault retrieval.
 
 OCR, audio/video transcription, ANN vector search, generated dependency-folder
 indexing, and trained rerankers are still not implemented. Dense embeddings are
@@ -80,6 +90,15 @@ changing ingestion or pack formats.
 
 ```bash
 uv sync
+```
+
+For a public checkout, keep generated local data out of git. Copy the sample
+project inventory before compiling an OKF vault:
+
+```bash
+cp config/wiki_projects.example.json config/wiki_projects.json
+uv run ./agent-context wiki --out . --action baseline --approve
+uv run ./agent-context vault-check --out . --rebuild
 ```
 
 ## Doctor Douyin v0.1
@@ -649,6 +668,11 @@ accepts or rejects each review file.
 The older `codex-preflight` remains the lower-level context generator used
 inside Stage 2; wrappers should not call it as the first default task hook
 because it skips the no-index clarify review.
+
+`codex-preflight` and `context-review` now use two concrete model-input modes:
+
+- `--mode fast`: user prompt plus the generated hot context pack, targeting roughly 2k-5k visible tokens.
+- `--mode deep`: fast mode plus core vault project concepts for PLM, Drama, Codex++, Gugu, and Doctor, targeting roughly 10k-20k visible tokens.
 
 `panel` writes a UI-friendly status contract and a local HTML panel:
 

@@ -1571,3 +1571,54 @@ def test_project_diversity_cap_expands_for_larger_replay_limits() -> None:
 
     assert sum(1 for source in small if source.get("project_id") == "project-1") == 2
     assert sum(1 for source in larger[:4] if source.get("project_id") == "project-1") == 3
+
+
+def test_resolver_uses_root_file_catalog_as_filesystem_provider(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    machine = tmp_path / "machine"
+    target = machine / "Applications" / "CodexPlusPlus.app" / "Contents" / "MacOS"
+    target.mkdir(parents=True)
+    (target / "CodexPlusPlus").write_text("binary placeholder", encoding="utf-8")
+    project = machine / "Users" / "gengrf" / "plm" / "scripts"
+    project.mkdir(parents=True)
+    (project / "plm_homelander_100k_writer.py").write_text("print('plm')", encoding="utf-8")
+    out = tmp_path / "out"
+
+    assert main(
+        [
+            "file-catalog",
+            "--scope",
+            str(machine),
+            "--out",
+            str(out / "catalog-shards" / "root-full"),
+            "--reset",
+        ]
+    ) == 0
+    capsys.readouterr()
+
+    assert main(
+        [
+            "resolve",
+            "--goal",
+            "我的电脑里 CodexPlusPlus 安装在哪里",
+            "--out",
+            str(out),
+            "--source-scope",
+            "filesystem",
+            "--limit",
+            "4",
+        ]
+    ) == 0
+
+    result = json.loads(capsys.readouterr().out)
+    sources = read_jsonl(Path(result["sources_jsonl_path"]))
+
+    assert result["selected_sources"] == ["root_file_catalog"]
+    assert any(source.get("source_group") == "root_file_catalog" for source in sources)
+    top = sources[0]
+    assert top["logical_path"].endswith("CodexPlusPlus")
+    assert top["source_zone"]
+    assert "source_weight" in top
+    assert "source_zone=" in top["why_selected"]

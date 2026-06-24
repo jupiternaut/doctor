@@ -11,6 +11,13 @@ from .resolver import resolve_context
 CODEX_PREFLIGHT_VERSION = "0.1"
 MODEL_INPUT_VERSION = "0.1"
 CODEX_PREFLIGHT_MODES = {"fast", "deep", "arena"}
+CORE_PROJECT_CONCEPT_IDS = (
+    "project-plm",
+    "project-drama",
+    "project-codex-plus-plus",
+    "project-gugu",
+    "project-doctor",
+)
 PATH_KEYS = (
     "context_md_path",
     "sources_jsonl_path",
@@ -192,17 +199,33 @@ def persist_preflight(root: Path, preflight: dict[str, Any]) -> None:
 
 
 def render_model_input(preflight: dict[str, Any]) -> str:
+    root = Path(str(preflight["out_root"]))
     context_path = Path(str(preflight["context_md_path"]))
     try:
         context_body = context_path.read_text(encoding="utf-8")
     except OSError as exc:
         context_body = f"_Context pack could not be read: {type(exc).__name__}: {exc}_\n"
+    mode = preflight["mode"] if preflight["mode"] in CODEX_PREFLIGHT_MODES else "fast"
+    core_concepts = render_core_project_concepts(root) if mode == "deep" else ""
+    context_tokens = estimate_tokens(context_body)
+    concept_tokens = estimate_tokens(core_concepts)
+    total_tokens = estimate_tokens(preflight["goal"]) + context_tokens + concept_tokens
+    target_budget = "10k-20k tokens" if mode == "deep" else "2k-5k tokens"
+    mode_summary = (
+        "Deep mode includes the hot context pack plus core project concept pages."
+        if mode == "deep"
+        else "Fast mode includes only the normalized prompt and hot context pack."
+    )
     lines = [
         "---",
         f"doctor_model_input_version: {MODEL_INPUT_VERSION}",
         f"codex_preflight_version: {preflight['codex_preflight_version']}",
         f"task_id: {preflight.get('task_id', '')}",
-        f"mode: {preflight['mode']}",
+        f"mode: {mode}",
+        f"target_context_budget: {target_budget}",
+        f"estimated_model_input_tokens: {total_tokens}",
+        f"context_pack_tokens: {context_tokens}",
+        f"core_project_concept_tokens: {concept_tokens}",
         f"source_scope: {preflight['source_scope']}",
         f"limit: {preflight['limit']}",
         f"context_md_path: {preflight.get('context_md_path')}",
@@ -221,6 +244,10 @@ def render_model_input(preflight: dict[str, Any]) -> str:
         "",
         "## Doctor Injection Contract",
         "",
+        f"- Context mode: `{mode}`.",
+        f"- Target context budget: `{target_budget}`.",
+        f"- Estimated visible payload: `{total_tokens}` tokens by ceil(chars/3).",
+        f"- {mode_summary}",
         "- Use the Doctor context pack below as local evidence for the task.",
         "- Separate local evidence from inference.",
         "- Mention when sources are weak, stale, missing, or only metadata-level.",
@@ -232,4 +259,27 @@ def render_model_input(preflight: dict[str, Any]) -> str:
         "",
         context_body,
     ]
+    if core_concepts:
+        lines.extend(["", "## Doctor Core Project Concepts", "", core_concepts])
     return "\n".join(lines)
+
+
+def render_core_project_concepts(root: Path) -> str:
+    vault_projects = root / "vault" / "projects"
+    blocks: list[str] = []
+    for concept_id in CORE_PROJECT_CONCEPT_IDS:
+        path = vault_projects / f"{concept_id}.md"
+        if not path.exists():
+            continue
+        try:
+            body = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        blocks.extend([f"### {concept_id}", "", f"Source file: `{path}`", "", body.strip(), ""])
+    if not blocks:
+        return ""
+    return "\n".join(blocks).rstrip() + "\n"
+
+
+def estimate_tokens(text: str) -> int:
+    return (len(text) + 2) // 3

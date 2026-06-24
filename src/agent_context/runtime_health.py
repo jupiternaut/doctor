@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import subprocess
 from datetime import datetime, timedelta
@@ -25,7 +26,7 @@ from .semantic_index import semantic_index_status
 
 RUNTIME_HEALTH_VERSION = "0.1"
 SEMANTIC_READINESS_VERSION = "0.1"
-DEFAULT_CODEX_PLUS_ROOT = Path("/Users/gengrf/Code/research/CodexPlusPlus-BigPizzaV3")
+CODEX_PLUS_ROOT_ENV_VARS = ("DOCTOR_CODEX_PLUS_ROOT", "CODEX_PLUS_ROOT")
 
 
 def run_runtime_health(
@@ -181,7 +182,7 @@ def downloads_check(out_root: Path, *, min_documents: int) -> dict[str, Any]:
     else:
         status = "failed"
         summary = "Downloads manifests are missing or empty"
-        next_action = "Run agent-context build --scope /Users/gengrf/Downloads --with-index."
+        next_action = "Run agent-context build --scope ~/Downloads --with-index."
     return check(
         "downloads_ingestion",
         "Downloads ingestion",
@@ -707,7 +708,14 @@ def normalized_codex_plus_root(codex_plus_root: Path | None) -> Path | None:
     if codex_plus_root:
         root = codex_plus_root.expanduser().resolve()
         return root if root.exists() else None
-    return DEFAULT_CODEX_PLUS_ROOT if DEFAULT_CODEX_PLUS_ROOT.exists() else None
+    for name in CODEX_PLUS_ROOT_ENV_VARS:
+        value = os.environ.get(name)
+        if not value:
+            continue
+        root = Path(value).expanduser().resolve()
+        if root.exists():
+            return root
+    return None
 
 
 def acceptance_matrix(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -1,0 +1,12 @@
+{
+  "projects": [
+    {
+      "concept_id": "project-sample",
+      "title": "Sample Project",
+      "path": "../fixtures/wiki_projects_sample/sample-project",
+      "aliases": ["Sample", "Example"],
+      "tags": ["project", "example", "resume"],
+      "why": "A small example project used to demonstrate OKF vault generation without indexing private local files."
+    }
+  ]
+}

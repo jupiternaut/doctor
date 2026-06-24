@@ -12,7 +12,7 @@ from .io import ensure_dir, write_text
 
 
 CODEX_PLUS_SMOKE_VERSION = "0.1"
-DEFAULT_CODEX_PLUS_ROOT = Path("/Users/gengrf/Code/research/CodexPlusPlus-BigPizzaV3")
+CODEX_PLUS_ROOT_ENV_VARS = ("DOCTOR_CODEX_PLUS_ROOT", "CODEX_PLUS_ROOT")
 
 
 def run_codex_plus_smoke(
@@ -226,7 +226,14 @@ def normalized_codex_plus_root(codex_plus_root: Path | None) -> Path | None:
     if codex_plus_root:
         root = codex_plus_root.expanduser().resolve()
         return root if root.exists() else None
-    return DEFAULT_CODEX_PLUS_ROOT if DEFAULT_CODEX_PLUS_ROOT.exists() else None
+    for name in CODEX_PLUS_ROOT_ENV_VARS:
+        value = os.environ.get(name)
+        if not value:
+            continue
+        root = Path(value).expanduser().resolve()
+        if root.exists():
+            return root
+    return None
 
 
 def render_codex_plus_smoke_markdown(report: dict[str, Any]) -> str:

@@ -92,6 +92,8 @@ SOURCE_SCOPE_TO_GREP_TARGETS = {
     "codexSessions": {"codex_sessions"},
     "agentSessions": {"codex_sessions"},
     "workflowDocs": {"workflow_docs"},
+    "vault": set(),
+    "filesystem": set(),
     "all": {target.source_id for target in GREP_TARGETS},
 }
 
