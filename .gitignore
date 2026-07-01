@@ -11,7 +11,9 @@ catalog-shards/
 indexes/
 lab/
 manifests/
+mirror_lab/
 packs/
+profiles/
 providers/codebase_memory/
 queries/
 runtime/

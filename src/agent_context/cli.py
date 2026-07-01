@@ -40,8 +40,11 @@ from .launchd import (
 from .llm_wiki import run_wiki_command
 from .mcp_live_smoke import run_mcp_live_smoke
 from .mcp_server import mcp_grant_access_consent, run_mcp_server
+from .mirror_lab import build_mirror_lab, run_mirror_lab_server
+from .mirror_ranker import record_pairwise_feedback, score_candidates, train_pairwise_ranker
 from .pack import build_context_pack
 from .panel import build_context_panel, record_panel_feedback
+from .profile_graph import approve_profile_diff, build_profile_graph, propose_profile_diff, record_profile_event
 from .project_index import build_project_index
 from .providers import refresh_projects, refresh_providers
 from .reproducibility import run_reproducibility_snapshot
@@ -233,6 +236,52 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="Restrict resolver source families. Defaults to all.",
     )
+
+    mirror_lab = subparsers.add_parser("mirror-lab", help="Build a local Chinese Mirror Lab review UI.")
+    mirror_lab.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    mirror_lab.add_argument("--goal", default="", help="Optional user goal shown in the lab state.")
+    mirror_lab.add_argument("--mode", choices=["fast", "deep", "arena"], default="fast", help="Default context mode shown in the lab.")
+
+    mirror_lab_server = subparsers.add_parser("mirror-lab-server", help="Serve the interactive Mirror Lab UI on localhost.")
+    mirror_lab_server.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+    mirror_lab_server.add_argument("--goal", default="", help="Optional initial user goal.")
+    mirror_lab_server.add_argument("--mode", choices=["fast", "deep", "arena"], default="fast", help="Initial context mode.")
+    mirror_lab_server.add_argument("--host", default="127.0.0.1", help="Bind host. Defaults to localhost.")
+    mirror_lab_server.add_argument("--port", type=int, default=8787, help="Bind port. Use 0 for a random free port.")
+    mirror_lab_server.add_argument("--no-open", action="store_true", help="Do not open the browser automatically.")
+
+    profile_build = subparsers.add_parser("profile-build", help="Build the approved Mirror profile graph from vault and feedback evidence.")
+    profile_build.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    profile_event = subparsers.add_parser("profile-event", help="Record a Mirror profile event for a source/project.")
+    profile_event.add_argument("--target-id", required=True, help="Project/source id affected by this event.")
+    profile_event.add_argument("--label", required=True, help="Event label, such as main_project, resume_fit, not_mine, stale, sensitive.")
+    profile_event.add_argument("--source", default="manual", help="Event source. Defaults to manual.")
+    profile_event.add_argument("--note", default="", help="Optional human note.")
+    profile_event.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    profile_diff = subparsers.add_parser("profile-diff", help="Propose a reviewable Mirror profile diff.")
+    profile_diff.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    profile_approve = subparsers.add_parser("profile-approve", help="Approve a Mirror profile diff and write canonical profile files.")
+    profile_approve.add_argument("--diff-id", required=True, help="Diff id under profiles/diffs/.")
+    profile_approve.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    ranker_feedback = subparsers.add_parser("ranker-feedback", help="Record pairwise ranking feedback for Mirror.")
+    ranker_feedback.add_argument("--goal", required=True, help="Goal/query that produced the candidates.")
+    ranker_feedback.add_argument("--winner-json", required=True, help="Winner candidate JSON object.")
+    ranker_feedback.add_argument("--loser-json", required=True, help="Loser candidate JSON object.")
+    ranker_feedback.add_argument("--reason", default="", help="Optional human reason.")
+    ranker_feedback.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    ranker_train = subparsers.add_parser("ranker-train", help="Train the lightweight Mirror pairwise ranker.")
+    ranker_train.add_argument("--out", default=None, help="Output root. Overrides global --out.")
+
+    ranker_score = subparsers.add_parser("ranker-score", help="Score candidate sources with the Mirror ranker.")
+    ranker_score.add_argument("--goal", required=True, help="Goal/query to score against.")
+    ranker_score.add_argument("--candidates-json", required=True, help="JSON array of candidate objects.")
+    ranker_score.add_argument("--exploration-slots", type=int, default=0, help="Number of exploration slots to reserve.")
+    ranker_score.add_argument("--out", default=None, help="Output root. Overrides global --out.")
 
     resolve_alternative = subparsers.add_parser("resolve-alternative", help="Record rejected sources and generate an alternative hot context pack.")
     resolve_alternative.add_argument("--goal", required=True, help="Task goal to resolve into relevant local context.")
@@ -976,6 +1025,42 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
             once=args.once,
         )
+    elif args.command == "mirror-lab":
+        result = build_mirror_lab(out_root, goal=args.goal, mode=args.mode)
+    elif args.command == "mirror-lab-server":
+        result = run_mirror_lab_server(
+            out_root,
+            host=args.host,
+            port=args.port,
+            goal=args.goal,
+            mode=args.mode,
+            open_browser=not args.no_open,
+        )
+    elif args.command == "profile-build":
+        result = build_profile_graph(out_root)
+    elif args.command == "profile-event":
+        result = record_profile_event(out_root, target_id=args.target_id, label=args.label, source=args.source, note=args.note)
+    elif args.command == "profile-diff":
+        result = propose_profile_diff(out_root)
+    elif args.command == "profile-approve":
+        result = approve_profile_diff(out_root, args.diff_id)
+    elif args.command == "ranker-feedback":
+        result = record_pairwise_feedback(
+            out_root,
+            goal=args.goal,
+            winner=parse_json_object_arg(args.winner_json, "--winner-json"),
+            loser=parse_json_object_arg(args.loser_json, "--loser-json"),
+            reason=args.reason,
+        )
+    elif args.command == "ranker-train":
+        result = train_pairwise_ranker(out_root)
+    elif args.command == "ranker-score":
+        result = score_candidates(
+            out_root,
+            args.goal,
+            parse_json_array_arg(args.candidates_json, "--candidates-json"),
+            exploration_slots=max(0, args.exploration_slots),
+        )
     elif args.command == "resolve-alternative":
         result = resolve_alternative_context(
             out_root,
@@ -1502,3 +1587,17 @@ def regenerate_report(scope: Path, out_root: Path) -> dict:
         "failures": len(failures),
         "report": str(paths.report_md),
     }
+
+
+def parse_json_object_arg(raw: str, name: str) -> dict:
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be a JSON object")
+    return value
+
+
+def parse_json_array_arg(raw: str, name: str) -> list[dict]:
+    value = json.loads(raw)
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise ValueError(f"{name} must be a JSON array of objects")
+    return value

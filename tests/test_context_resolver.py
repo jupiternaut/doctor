@@ -12,6 +12,7 @@ import pytest
 
 from agent_context.cli import main
 from agent_context.access_policy import ConsentRequiredError, record_access_audit
+from agent_context.mirror_ranker import record_pairwise_feedback, train_pairwise_ranker
 from agent_context.mcp_server import (
     mcp_access_audit,
     mcp_access_policy,
@@ -1143,6 +1144,43 @@ def test_feedback_rerank_boosts_selected_provider_source(
     assert sources[0]["path"] == str(beta)
     assert beta_source["resolver_score_parts"]["feedback"] > 0
     assert beta_source["resolver_score_parts"]["feedback_query_family_source"] > 0
+
+
+def test_mirror_ranker_feedback_affects_resolver_fusion(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    goal = "我要去求职，请帮我看下我的电脑里适合简历包装的项目有哪些"
+    winner = {
+        "source_id": "project-plm",
+        "path": "/tmp/plm/README.md",
+        "source_group": "vault",
+        "score": 0.4,
+        "profile_prior": 1.0,
+        "bm25": 0.4,
+    }
+    loser = {
+        "source_id": "random-doc",
+        "path": "/tmp/random.md",
+        "source_group": "downloads",
+        "score": 0.4,
+        "profile_prior": 0.0,
+        "bm25": 0.4,
+    }
+
+    record_pairwise_feedback(out, goal=goal, winner=winner, loser=loser, reason="PLM is the user's real project")
+    train_pairwise_ranker(out)
+
+    sources = fuse_candidates(
+        [loser, winner],
+        2,
+        out_root=out,
+        goal=goal,
+        feedback_model={},
+        route_selector_model={},
+    )
+
+    assert sources[0]["source_id"] == "project-plm"
+    assert sources[0]["resolver_score_parts"]["mirror_ranker"] > 0
+    assert sources[1]["resolver_score_parts"]["mirror_ranker"] < 0
 
 
 def test_resolve_alternative_records_negative_feedback_and_avoids_rejected_source(

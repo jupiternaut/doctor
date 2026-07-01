@@ -20,12 +20,20 @@ raw files
 
 ## Documents
 
+- **New Developer Start Here:** [Developer Onboarding](docs/DEVELOPER_ONBOARDING.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Module Map](docs/MODULE_MAP.md)
+- [Data Contract](docs/DATA_CONTRACT.md)
+- [Runtime Flow](docs/RUNTIME_FLOW.md)
+- [Known Gaps](docs/KNOWN_GAPS.md)
+- [Roadmap](docs/ROADMAP.md)
 - [Doctor Handoff](docs/DOCTOR_HANDOFF.md)
 - [Doctor Vision Roadmap](docs/DOCTOR_VISION_ROADMAP.md)
 - [Doctor Research Scorecard](docs/DOCTOR_RESEARCH_SCORECARD.md)
 - [Doctor Runtime VM](docs/DOCTOR_RUNTIME_VM.md)
 - [Doctor Douyin v0.1](docs/DOCTOR_DOUYIN_V0_1.md)
 - [Doctor Lab](docs/DOCTOR_LAB.md)
+- [Mirror Lab v0.2](docs/MIRROR_LAB_V0_2.md)
 - [Open Source Release Boundary](docs/OPEN_SOURCE_RELEASE_BOUNDARY.md)
 - [LLM-Wiki / OKF Vault Baseline](docs/LLM_WIKI_OKF_BASELINE.md)
 - [Vault Resolver](docs/VAULT_RESOLVER.md)

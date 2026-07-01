@@ -14,6 +14,8 @@ from .feedback_model import feedback_boost_parts, load_feedback_model, query_fam
 from .file_catalog import CatalogPaths, search_file_catalog
 from .grep_route import run_grep_route_probe
 from .io import ensure_dir, write_jsonl, write_text
+from .mirror_ranker import score_candidates as score_mirror_candidates
+from .mirror_ranker import training_examples_path as mirror_training_examples_path
 from .pack import slugify, snippet
 from .project_index import project_index_path_for, search_project_index
 from .providers import (
@@ -64,6 +66,8 @@ def resolve_context(
     sources = fuse_candidates(
         candidates,
         limit,
+        out_root=out_root,
+        goal=goal,
         feedback_model=feedback_model,
         route_selector_model=route_selector_model,
         query_family=plan.get("query_family"),
@@ -1065,6 +1069,8 @@ def fuse_candidates(
     candidates: list[dict[str, Any]],
     limit: int,
     *,
+    out_root: Path | None = None,
+    goal: str = "",
     feedback_model: dict[str, Any] | None = None,
     route_selector_model: dict[str, Any] | None = None,
     query_family: str | None = None,
@@ -1145,8 +1151,44 @@ def fuse_candidates(
         candidate["why_selected"] = why_selected(candidate)
         scored.append(candidate)
 
+    apply_mirror_ranker(out_root, goal, scored)
     scored.sort(key=candidate_rank_key)
     return diversify(scored, limit=limit)[:limit]
+
+
+def apply_mirror_ranker(out_root: Path | None, goal: str, candidates: list[dict[str, Any]]) -> None:
+    if not out_root or not candidates:
+        return
+    if not mirror_training_examples_path(out_root).exists():
+        return
+    mirror_result = score_mirror_candidates(out_root, goal, candidates, exploration_slots=0)
+    mirror_by_key = {
+        mirror_candidate_key(candidate): candidate
+        for candidate in mirror_result.get("ranked_candidates", [])
+    }
+    for candidate in candidates:
+        mirror = mirror_by_key.get(mirror_candidate_key(candidate))
+        if not mirror:
+            continue
+        raw = safe_float(mirror.get("score"))
+        boost = max(-0.18, min(0.18, raw * 0.08))
+        parts = candidate.setdefault("resolver_score_parts", {})
+        parts["mirror_ranker"] = round(boost, 6)
+        parts["mirror_ranker_raw"] = round(raw, 6)
+        parts["mirror_ranker_explanation"] = mirror.get("explanation") or []
+        candidate["score"] = round(max(0.0, min(1.0, safe_float(candidate.get("score")) + boost)), 6)
+        candidate["why_selected"] = why_selected(candidate)
+
+
+def mirror_candidate_key(candidate: dict[str, Any]) -> str:
+    return str(
+        candidate.get("source_chunk_id")
+        or candidate.get("source_id")
+        or candidate.get("path")
+        or candidate.get("id")
+        or candidate.get("ranker_candidate_index")
+        or ""
+    )
 
 
 def candidate_rank_key(source: dict[str, Any]) -> tuple[float, float, float, str, str]:
