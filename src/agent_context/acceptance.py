@@ -535,33 +535,35 @@ def run_v1_semantic_evidence_refresh_if_due(
     if not enabled:
         return {"refreshed": False, "reason": "disabled"}
     gate = latest_semantic_evidence_gate(out_root)
+    if wait_for_semantic_evidence:
+        wait_result = wait_for_semantic_launchd_run(
+            out_root,
+            timeout_seconds=max(0, wait_timeout_seconds),
+            poll_seconds=max(1, wait_poll_seconds),
+        )
+        if wait_result.get("status") == "ok":
+            refreshed = run_v1_semantic_evidence_refresh(
+                out_root,
+                gate=gate,
+                min_semantic_chunks=min_semantic_chunks,
+                required_trend_days=required_trend_days,
+            )
+            refreshed["wait"] = compact_refresh_result(wait_result)
+            return refreshed
+        due_at = parse_iso_datetime(gate, now) if gate else None
+        wait = wait_until("monitor_not_due", due_at, now) if due_at else {}
+        return {
+            "refreshed": False,
+            "reason": "semantic_wait_timeout",
+            "next_gate_at": str(wait.get("next_gate_at") or gate),
+            "seconds_until_next_gate": int(wait.get("seconds_until_next_gate") or 0),
+            "wait": compact_refresh_result(wait_result),
+        }
     if not gate:
         return {"refreshed": False, "reason": "missing_next_monitor_due_at"}
     due_at = parse_iso_datetime(gate, now)
     if due_at and now < due_at:
         wait = wait_until("monitor_not_due", due_at, now)
-        if wait_for_semantic_evidence:
-            wait_result = wait_for_semantic_launchd_run(
-                out_root,
-                timeout_seconds=max(0, wait_timeout_seconds),
-                poll_seconds=max(1, wait_poll_seconds),
-            )
-            if wait_result.get("status") == "ok":
-                refreshed = run_v1_semantic_evidence_refresh(
-                    out_root,
-                    gate=gate,
-                    min_semantic_chunks=min_semantic_chunks,
-                    required_trend_days=required_trend_days,
-                )
-                refreshed["wait"] = compact_refresh_result(wait_result)
-                return refreshed
-            return {
-                "refreshed": False,
-                "reason": "semantic_wait_timeout",
-                "next_gate_at": wait["next_gate_at"],
-                "seconds_until_next_gate": wait["seconds_until_next_gate"],
-                "wait": compact_refresh_result(wait_result),
-            }
         return {
             "refreshed": False,
             "reason": wait["wait_reason"],
